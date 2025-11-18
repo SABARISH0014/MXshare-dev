@@ -1,0 +1,10 @@
+/* * This file is the entry point for PostCSS/Tailwind compilation in Vite.
+ * It imports the three layers of Tailwind CSS.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* * Optional: Global styles can be added here, 
+ * but Tailwind is generally preferred for styling components.
+ */
