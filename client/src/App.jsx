@@ -25,23 +25,17 @@ import { GoogleOAuthProvider, GoogleLogin, useGoogleLogin } from '@react-oauth/g
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from 'recharts';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { Aperture, Search, Zap, Shield, BookOpen, LogIn, UserPlus, X, Bell, Loader2, Lightbulb, Clipboard, User, Lock, Upload, LogOut, FileText, Calendar, Hash, File, Send, CheckCircle, Star, Award, TrendingUp, Download, Eye, MessageSquare, Menu } from 'lucide-react';
+import { Aperture, Search, Zap, Shield, PlayCircle, BookOpen, LogIn, UserPlus, X, Bell, Loader2, Lightbulb, Clipboard, User, Lock, Upload, LogOut, FileText, Calendar, Hash, File, Send, CheckCircle, Star, Award, TrendingUp, Download, Eye, MessageSquare, Menu, ArrowLeft } from 'lucide-react';
 
 
-
-import { io } from 'socket.io-client';
+// --- ADD THIS IMPORT ---
+import { socket } from './socket';
 // --- YOUR CLIENT ID ---
 // Replace this with the Client ID you got from Google Cloud Console
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const API_BASE_URL = 'http://localhost:3001';
 
 // const REDIRECT_URL = import.meta.env.REDIRECT_URL; // <-- REMOVED
-
-export const socket = io("http://localhost:3001", {
-  // --- DELETED --- (Change 3)
-  // withCredentials: true,
-  transports: ["websocket"]
-});
 
 
 // --- LUCIDE ICONS OBJECT ---
@@ -357,28 +351,22 @@ const AuthForm = ({ type, onNavigate, onAuthSuccess }) => {
     setError("");
   };
 
-  // --- GOOGLE LOGIN HOOK (Corrected) ---
-    // --- GOOGLE LOGIN HOOK (Redirect / auth-code flow) ---
   const googleLogin = useGoogleLogin({
-  flow: "auth-code",
-  ux_mode: "redirect",
-  access_type: "offline",
-  prompt: "consent",
-  include_granted_scopes: true,
-  scope: "openid profile email https://www.googleapis.com/auth/drive",
-  redirect_uri: "http://localhost:5173/auth/google/callback",
-});
+    flow: "auth-code",
+    ux_mode: "redirect",
+    access_type: "offline",
+    prompt: "consent",
+    include_granted_scopes: true,
+    scope: "openid profile email https://www.googleapis.com/auth/drive.file",
+    redirect_uri: "http://localhost:5173/auth/google/callback",
+    onError: () => addToast("Google Sign-In failed.", "error"),
+  });
 
-
-
-  // --- LOCAL AUTH HANDLER ---
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!EMAIL_REGEX.test(formData.email)) {
-      setError(
-        "Access restricted: Please use your official MCA roll no. (e.g., 25MX343@psgtech.ac.in)."
-      );
+      setError("Access restricted: Please use your official MCA roll no. (e.g., 25MX343@psgtech.ac.in).");
       return;
     }
 
@@ -387,7 +375,6 @@ const AuthForm = ({ type, onNavigate, onAuthSuccess }) => {
       return;
     }
 
-    // Simulated local login/signup
     setIsLoading(true);
     setError("");
     await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -400,12 +387,7 @@ const AuthForm = ({ type, onNavigate, onAuthSuccess }) => {
         createdAt: new Date().toISOString(),
       };
 
-      addToast(
-        `${isLogin ? "Welcome back" : "Welcome aboard"}, MXian!`,
-        "success"
-      );
-      // --- MODIFIED --- (Change 2)
-      // Pass mock data matching the new onAuthSuccess signature
+      addToast(`${isLogin ? "Welcome back" : "Welcome aboard"}, MXian!`, "success");
       onAuthSuccess("mock_local_token_123", mockUser, "mock_local_refresh_token");
     } catch (err) {
       setError("A network error occurred.");
@@ -418,7 +400,19 @@ const AuthForm = ({ type, onNavigate, onAuthSuccess }) => {
   const ctaText = isLogin ? "Sign In Securely" : "Create Account";
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gray-950 p-4">
+    // The parent div must be 'relative' for the absolute button to position correctly
+    <div className="relative flex justify-center items-center min-h-screen bg-gray-950 p-4">
+      
+      {/* --- Back Button --- */}
+      <button 
+        onClick={() => onNavigate('')} // Navigate to root ('/')
+        className="absolute top-8 left-8 flex items-center text-gray-400 hover:text-white transition-colors font-medium"
+      >
+        <ArrowLeft className="w-5 h-5 mr-2" />
+        Back to Home
+      </button>
+      {/* ------------------- */}
+
       <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-xl shadow-2xl p-8 space-y-6">
         <h2 className="text-3xl font-extrabold text-white text-center">
           {formTitle}
@@ -427,7 +421,6 @@ const AuthForm = ({ type, onNavigate, onAuthSuccess }) => {
           MCA Department Access Only
         </p>
 
-        {/* --- GOOGLE SIGN-IN BUTTON --- */}
         <Button
           onClick={() => googleLogin()}
           variant="secondary"
@@ -438,24 +431,10 @@ const AuthForm = ({ type, onNavigate, onAuthSuccess }) => {
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <>
-              <svg
-                className="w-5 h-5"
-                viewBox="0 0 48 48"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M43.611 20.083H42V20H24V28H36.444C35.278 31.833 32.222 34.722 28.5 35.5V36H24C16.8 36 11 30.2 11 23C11 15.8 16.8 10 24 10C27.917 10 31.25 11.417 33.75 13.889L37.111 10.556C33.167 6.778 28.833 5 24 5C13.889 5 5 13.889 5 23C5 32.111 13.889 41 24 41C34.111 41 43 32.111 43 23C43 21.722 43.444 20.889 43.611 20.083Z"
-                  fill="#FFC107"
-                />
-                <path
-                  d="M24 41C34.111 41 43 32.111 43 23C43 21.722 43.444 20.889 43.611 20.083H42V20H24V28H36.444C35.278 31.833 32.222 34.722 28.5 35.5V36H24C16.8 36 11 30.2 11 23C11 15.8 16.8 10 24 10C27.917 10 31.25 11.417 33.75 13.889L37.111 10.556C33.167 6.778 28.833 5 24 5C13.889 5 5 13.889 5 23C5 32.111 13.889 41 24 41Z"
-                  fill="#4CAF50"
-                />
-                <path
-                  d="M24 10C27.917 10 31.25 11.417 33.75 13.889L37.111 10.556C33.167 6.778 28.833 5 24 5C13.889 5 5 13.889 5 23C5 32.111 13.889 41 24 41C34.111 41 43 32.111 43 23C43 21.722 43.444 20.889 43.611 20.083H42V20H24V28H36.444C35.278 31.833 32.222 34.722 28.5 35.5V36H24C16.8 36 11 30.2 11 23C11 15.8 16.8 10 24 10Z"
-                  fill="#1976D2"
-                />
+              <svg className="w-5 h-5" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M43.611 20.083H42V20H24V28H36.444C35.278 31.833 32.222 34.722 28.5 35.5V36H24C16.8 36 11 30.2 11 23C11 15.8 16.8 10 24 10C27.917 10 31.25 11.417 33.75 13.889L37.111 10.556C33.167 6.778 28.833 5 24 5C13.889 5 5 13.889 5 23C5 32.111 13.889 41 24 41C34.111 41 43 32.111 43 23C43 21.722 43.444 20.889 43.611 20.083Z" fill="#FFC107"/>
+                <path d="M24 41C34.111 41 43 32.111 43 23C43 21.722 43.444 20.889 43.611 20.083H42V20H24V28H36.444C35.278 31.833 32.222 34.722 28.5 35.5V36H24C16.8 36 11 30.2 11 23C11 15.8 16.8 10 24 10C27.917 10 31.25 11.417 33.75 13.889L37.111 10.556C33.167 6.778 28.833 5 24 5C13.889 5 5 13.889 5 23C5 32.111 13.889 41 24 41Z" fill="#4CAF50"/>
+                <path d="M24 10C27.917 10 31.25 11.417 33.75 13.889L37.111 10.556C33.167 6.778 28.833 5 24 5C13.889 5 5 13.889 5 23C5 32.111 13.889 41 24 41C34.111 41 43 32.111 43 23C43 21.722 43.444 20.889 43.611 20.083H42V20H24V28H36.444C35.278 31.833 32.222 34.722 28.5 35.5V36H24C16.8 36 11 30.2 11 23C11 15.8 16.8 10 24 10Z" fill="#1976D2"/>
               </svg>
               Sign In with College Google
             </>
@@ -464,13 +443,10 @@ const AuthForm = ({ type, onNavigate, onAuthSuccess }) => {
 
         <div className="relative flex items-center">
           <div className="flex-grow border-t border-gray-700"></div>
-          <span className="flex-shrink mx-4 text-gray-400 text-sm">
-            or using email
-          </span>
+          <span className="flex-shrink mx-4 text-gray-400 text-sm">or using email</span>
           <div className="flex-grow border-t border-gray-700"></div>
         </div>
 
-        {/* --- EMAIL FORM --- */}
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
             <p className="text-sm font-medium text-red-500 text-center bg-red-900/20 p-2 rounded-lg">
@@ -1228,304 +1204,356 @@ const NoteDetailPage = ({ note, onBack }) => {
 // --- File Upload Component (Integrated Google Drive Logic) ---
 // ----------------------------------------------------------------------
 
+// ----------------------------------------------------------------------
+// --- File Upload Component (With Tags & Video Support) ---
+// ----------------------------------------------------------------------
+
+// ----------------------------------------------------------------------
+// --- File Upload Component (Updated Heights) ---
+// ----------------------------------------------------------------------
+// ----------------------------------------------------------------------
+// --- File Upload Component (Fixed loginToDrive) ---
+// ----------------------------------------------------------------------
+// ----------------------------------------------------------------------
+// --- File Upload Component (Fixed) ---
+// ----------------------------------------------------------------------
 const FileUploadCard = ({ onFileUploadSuccess }) => {
   const { addToast } = useContext(ToastContext);
-  // --- FIX 1: Remove googleAccessToken. It's not provided in AuthContext.
   const { authToken } = useContext(AuthContext);
 
-  const [file, setFile] = useState(null);
-  const [title, setTitle] = useState('');
+  // Modes: 'selection', 'file-preview', 'video-entry'
+  const [mode, setMode] = useState('selection'); 
+  
+  // Data States
+  const [selectedFile, setSelectedFile] = useState(null); 
+  const [videoUrl, setVideoUrl] = useState('');
+  const [customTitle, setCustomTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [semester, setSemester] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [uploadProgressMap, setUploadProgressMap] = useState({});
-  const uploadProgressRef = useRef({});
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const mountedRef = useRef(true);
+  // Tag States
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState('');
 
-  
-  // keep ref synced so interval waiter can read latest progress
-  useEffect(() => { uploadProgressRef.current = uploadProgressMap; }, [uploadProgressMap]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const onServerProgress = (data) => {
-      if (!data) return;
-      const key = data.uploadId || data.fileName || 'unknown';
-      setUploadProgressMap(prev => ({ ...prev, [key]: data.percent }));
-    };
-    socket.on('uploadProgress', onServerProgress);
-    return () => {
-      mountedRef.current = false;
-      socket.off('uploadProgress', onServerProgress);
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
-
-
-  
-  // --- FIX 2: Corrected script loading logic ---
-  const loadPickerScripts = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      // don't reload if already present
-      if (window.gapi && window.google && window.google.picker) return resolve();
-
-      const script1 = document.createElement('script');
-      script1.src = 'https://apis.google.com/js/api.js';
-      script1.async = true;
-      script1.onload = () => {
-        // Load the 'picker' library.
-        // The 'resolve' must be INSIDE this callback.
-        window.gapi.load('picker', () => {
-          resolve(); 
-        });
-      };
-      script1.onerror = reject;
-      document.body.appendChild(script1);
-    });
-  }, []);
-
-  const { googleAccessToken } = useContext(AuthContext);
-
-// --- REQUIRED CALLBACK for Google Picker ---
-function handlePickerSelection(data) {
-  if (data.action === google.picker.Action.PICKED) {
-    const file = data.docs[0];
-    console.log("Picked file:", file);
-    addToast(`Selected file: ${file.name}`, "success");
-  }
-}
-
-
-const openDrivePicker = () => {
-  const gToken = localStorage.getItem("googleAccessToken");
-  if (!gToken) {
-    addToast("Google Drive access token missing. Please login again.", "error");
-    return;
-  }
-
-  /* Load gapi if not loaded */
-  window.gapi.load("picker", { callback: createPicker });
-
-  function createPicker() {
-    const picker = new window.google.picker.PickerBuilder()
-      .setAppId("1073147341040") // <-- your app ID
-      .setOAuthToken(gToken) // <-- REQUIRED
-      .setDeveloperKey("AIzaSyAO3xi6GsU0b_A5gVmu3yVTpjST-ZNLI0o")
-      .addView(
-        new google.picker.DocsView(google.picker.ViewId.DOCS)
-          .setIncludeFolders(false)
-          .setMimeTypes(
-            "application/pdf," +
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-          )
-      )
-      .setCallback(handlePickerSelection)
-      .build();
-
-    picker.setVisible(true);
-  }
-};
-
-
-
-
-  // ... (rest of FileUploadCard component is unchanged) ...
-  const handleFileChange = (e) => { 
-    const selectedFile = e.target.files ? e.target.files[0] : null;
-    if (selectedFile) {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setFile(selectedFile);
-      setTitle(selectedFile.name.replace(/\.(pdf|docx|pptx)$/i, ''));
-      setUploadStatus(null);
-      setPreviewUrl(URL.createObjectURL(selectedFile));
-    }
-  };
-
-  const clearFileSelection = () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
-    setFile(null);
-    setTitle('');
+  // --- Helper: Reset ---
+  const resetForm = () => {
+    setMode('selection');
+    setSelectedFile(null);
+    setVideoUrl('');
+    setCustomTitle('');
     setSubject('');
     setSemester('');
+    setTags([]);     
+    setTagInput(''); 
   };
 
-  const handleUploadSubmit = async (e) => {
-    e.preventDefault();
-    if (!file || !title.trim() || !subject || !semester) {
-      addToast('Please select a file, title, subject, and semester.', 'error');
-      return;
+  // --- Helper: Video Embed ---
+  const getYoutubeEmbed = (url) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
+  };
+
+  // --- Tag Handlers ---
+  const handleAddTag = (e) => {
+    e?.preventDefault();
+    const trimmed = tagInput.trim();
+    
+    if (!trimmed) return;
+    
+    if (tags.includes(trimmed)) {
+        addToast("Tag already added.", "error");
+        return;
+    }
+    
+    if (tags.length >= 5) {
+        addToast("Maximum 5 tags allowed.", "error");
+        return;
     }
 
-    const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
-    setIsUploading(true);
-    setUploadStatus(null);
-    setUploadProgressMap(prev => ({ ...prev, [uploadId]: 0, [`${uploadId}-to-backend`]: 0 }));
+    setTags([...tags, trimmed]);
+    setTagInput('');
+  };
 
-    const formData = new FormData();
-    formData.append('title', String(title.trim()));
-    formData.append('subject', String(subject));
-    formData.append('semester', String(semester));
-    formData.append('file', file);
-    formData.append('uploadId', uploadId);
+  const handleRemoveTag = (tagToRemove) => {
+    setTags(tags.filter(t => t !== tagToRemove));
+  };
 
-    addToast('Starting upload...', 'info');
+  const handleTagKeyDown = (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        handleAddTag();
+    }
+  };
+
+  // --- Google Picker Logic ---
+  const loadPickerApi = () => {
+    return new Promise((resolve) => {
+      if (window.google && window.google.picker) { resolve(); } 
+      else {
+        const script = document.createElement("script");
+        script.src = "https://apis.google.com/js/api.js";
+        script.onload = () => window.gapi.load("picker", resolve);
+        document.body.appendChild(script);
+      }
+    });
+  };
+
+  const createPicker = (accessToken) => {
+    const pickerCallback = (data) => {
+      if (data.action === window.google.picker.Action.PICKED) {
+        const doc = data.docs[0];
+        setSelectedFile({
+          id: doc.id,
+          name: doc.name,
+          mimeType: doc.mimeType,
+          iconUrl: doc.iconUrl,
+          accessToken: accessToken
+        });
+        setCustomTitle(doc.name); 
+        setMode('file-preview');
+      }
+    };
+
+    const developerKey = import.meta.env.VITE_GOOGLE_API_KEY;
+    const appId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+    const uploadView = new window.google.picker.DocsUploadView();
+    const driveView = new window.google.picker.DocsView().setIncludeFolders(true).setSelectFolderEnabled(false);
+
+    const picker = new window.google.picker.PickerBuilder()
+      .addView(uploadView)
+      .addView(driveView)
+      .setOAuthToken(accessToken)
+      .setDeveloperKey(developerKey)
+      .setAppId(appId)
+      .setOrigin(window.location.protocol + '//' + window.location.host)
+      .setCallback(pickerCallback)
+      .build();
+    picker.setVisible(true);
+  };
+
+  // --- THIS WAS MISSING IN YOUR CODE ---
+  const loginToDrive = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      await loadPickerApi();
+      createPicker(tokenResponse.access_token);
+    },
+    scope: "https://www.googleapis.com/auth/drive.file",
+    onError: () => addToast("Failed to authorize Google Drive", "error"),
+  });
+  // -------------------------------------
+
+  // --- Submission Logic ---
+  const handleSubmit = async () => {
+    if (!customTitle || !subject || !semester) {
+      addToast("Please fill in Title, Subject, and Semester.", "error");
+      return;
+    }
+    
+    if (mode === 'video-entry' && !videoUrl) {
+        addToast("Please enter a valid Video URL.", "error");
+        return;
+    }
+
+    setIsSubmitting(true);
 
     try {
-      const res = await axios.post(`${API_BASE_URL}/api/notes/upload`, formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${authToken}` // This is correct
-        },
-        onUploadProgress: (evt) => {
-          const percent = evt.total ? Math.round((evt.loaded * 100) / evt.total) : 0;
-          setUploadProgressMap(prev => ({ ...prev, [`${uploadId}-to-backend`]: percent }));
-        },
-        timeout: 0
-      });
+      const payload = {
+        name: customTitle,
+        subject,
+        semester,
+        videoUrl: videoUrl,
+        tags: tags,
+        ...(mode === 'file-preview' && selectedFile ? {
+            fileId: selectedFile.id,
+            mimeType: selectedFile.mimeType,
+            iconUrl: selectedFile.iconUrl,
+            googleToken: selectedFile.accessToken
+        } : {})
+      };
 
-      if (res && res.data) {
-        addToast(res.data.message || 'Upload request accepted.', 'success');
-        setUploadStatus('pending');
-        if (res.data.note) onFileUploadSuccess && onFileUploadSuccess(res.data.note);
+      const res = await axios.post(
+        `${API_BASE_URL}/api/notes/save-drive-reference`,
+        payload,
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+
+      if (res.data) {
+        addToast("Material published successfully!", "success");
+        if (onFileUploadSuccess) onFileUploadSuccess(res.data.note);
+        resetForm();
       }
     } catch (err) {
-      console.error('Upload error:', err);
-      addToast('Upload failed (network or server).', 'error');
-      setUploadStatus('error');
-      setUploadProgressMap(prev => ({ ...prev, [uploadId]: -1 }));
-      setTimeout(() => setUploadProgressMap(prev => { const c = { ...prev }; delete c[uploadId]; delete c[`${uploadId}-to-backend`]; return c; }), 6000);
-      return;
+      console.error(err);
+      addToast("Failed to save.", "error");
     } finally {
-      setIsUploading(false);
+      setIsSubmitting(false);
     }
-
-    // waiter uses uploadProgressRef to read latest server progress
-    const waiter = setInterval(() => {
-      const serverPercent = uploadProgressRef.current[uploadId];
-      if (serverPercent === 100) {
-        setUploadStatus('success');
-        addToast('Upload complete (Drive).', 'success');
-        clearInterval(waiter);
-        setTimeout(() => setUploadProgressMap(prev => { const c = { ...prev }; delete c[uploadId]; delete c[`${uploadId}-to-backend`]; return c; }), 2500);
-        clearFileSelection();
-        return;
-      }
-      if (serverPercent === -1) {
-        setUploadStatus('error');
-        addToast('Server-side upload error.', 'error');
-        clearInterval(waiter);
-        setTimeout(() => setUploadProgressMap(prev => { const c = { ...prev }; delete c[uploadId]; delete c[`${uploadId}-to-backend`]; return c; }), 4000);
-        return;
-      }
-    }, 700);
   };
 
-  const ProgressBar = ({ percent }) => (
-    <div className="w-full bg-gray-800 rounded h-2 overflow-hidden">
-      <div className="h-2 transition-all" style={{ width: `${Math.max(0, Math.min(100, percent || 0))}%`, background: 'linear-gradient(90deg,#2563eb,#60a5fa)' }} />
-    </div>
-  );
+  // ---------------- RENDER ----------------
 
+  // 1. SELECTION SCREEN
+  if (mode === 'selection') {
+    return (
+        <div className="bg-gray-900 rounded-xl shadow-2xl p-8 border border-gray-800 h-full flex flex-col justify-center">
+            <h2 className="text-2xl font-bold text-white mb-6 text-center">Share Material</h2>
+            <div className="grid grid-cols-2 gap-4">
+                <button 
+                    onClick={() => loginToDrive()} 
+                    className="flex flex-col items-center justify-center p-6 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl transition-all hover:-translate-y-1 group"
+                >
+                    <div className="w-14 h-14 bg-blue-900/30 rounded-full flex items-center justify-center mb-3 group-hover:bg-blue-600 transition-colors">
+                        <FileText className="w-7 h-7 text-blue-400 group-hover:text-white" />
+                    </div>
+                    <span className="font-semibold text-gray-200">Document / File</span>
+                    <span className="text-xs text-gray-500 mt-1">PDF, PPT, DOCX</span>
+                </button>
+
+                <button 
+                    onClick={() => setMode('video-entry')}
+                    className="flex flex-col items-center justify-center p-6 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl transition-all hover:-translate-y-1 group"
+                >
+                    <div className="w-14 h-14 bg-red-900/30 rounded-full flex items-center justify-center mb-3 group-hover:bg-red-600 transition-colors">
+                        <PlayCircle className="w-7 h-7 text-red-400 group-hover:text-white" />
+                    </div>
+                    <span className="font-semibold text-gray-200">Video Link</span>
+                    <span className="text-xs text-gray-500 mt-1">YouTube, Vimeo</span>
+                </button>
+            </div>
+        </div>
+    );
+  }
+
+  // 2. DETAILS FORM
   return (
-    <div className="bg-gray-900 rounded-xl shadow-2xl p-6 lg:p-8 border border-gray-800 h-full">
-      <h2 className="text-2xl font-bold text-white mb-6 border-b pb-3 border-gray-700">Upload Document</h2>
+    <div className="bg-gray-900 rounded-xl shadow-2xl p-6 border border-gray-800 h-full overflow-y-auto">
+      <div className="flex justify-between items-center mb-4 border-b border-gray-800 pb-4">
+        <h3 className="text-xl font-bold text-white">
+            {mode === 'file-preview' ? 'File Details' : 'Video Details'}
+        </h3>
+        <Button variant="ghost" size="sm" onClick={resetForm} className="text-gray-400 hover:text-white">
+          <X className="w-4 h-4 mr-1" /> Back
+        </Button>
+      </div>
 
-      <form onSubmit={handleUploadSubmit} className="space-y-6">
-        {!file ? (
-          <label className="block border-4 border-dashed border-blue-800/50 bg-gray-800/50 rounded-xl p-16 text-center transition-colors duration-300 hover:border-blue-600 cursor-pointer">
-            <Upload className="w-16 h-16 mx-auto text-blue-500 mb-4" />
-            <p className="text-xl font-semibold text-gray-200">Drag & Drop notes here</p>
-            <p className="text-sm text-gray-400 mt-1">(.pdf, .docx, .pptx) Max 50MB</p>
-            <input type="file" onChange={handleFileChange} accept=".pdf,.docx,.pptx" className="hidden" />
-          </label>
-        ) : (
-          <div className="p-4 border border-blue-800/50 bg-gray-800/50 rounded-lg space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <File className="w-5 h-5 text-blue-500" />
-                <span className="font-medium text-white truncate">{file.name}</span>
-                <span className="text-xs text-gray-400 ml-3">({Math.round(file.size/1024)} KB)</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button type="button" variant="ghost" size="icon" onClick={() => clearFileSelection()}>
-                  <X className="w-4 h-4 text-gray-500" />
-                </Button>
-              </div>
-            </div>
-
-            <Input label="Document Title" id="upload-title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Select label="Semester" id="semester" value={semester} onChange={(e) => setSemester(e.target.value)} required>
-                <option value="">Select Semester...</option>
-                {syllabusData.semesters.map(sem => (<option key={sem.value} value={sem.value}>{sem.name}</option>))}
-              </Select>
-
-              <Select label="Subject" id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} required>
-                <option value="">Select Subject...</option>
-                {syllabusData.subjects.map(subj => (<option key={subj} value={subj}>{subj}</option>))}
-              </Select>
-            </div>
-
-            {previewUrl && (
-              <div className="mt-2">
-                <p className="text-sm text-gray-300 mb-2">Preview:</p>
-                {file.type === 'application/pdf' ? (
-                  <div className="w-full h-64 border border-gray-700 rounded overflow-hidden">
-                    <iframe title="pdf-preview" src={previewUrl} className="w-full h-full" />
-                  </div>
-                ) : (
-                  <div className="p-3 bg-gray-800 rounded text-sm text-gray-300">
-                    Preview not available. <a href={previewUrl} target="_blank" rel="noreferrer" className="text-blue-400 underline ml-1">Open file</a>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <Button type="button" variant="outline" onClick={openDrivePicker} className="flex-1">
-                Choose from Drive
-              </Button>
-              <Button type="submit" className="flex-1" disabled={isUploading || !file}>
-                {isUploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading...</>
-                : uploadStatus === 'success' ? <><CheckCircle className="mr-2 h-4 w-4" /> Upload Complete!</>
-                : uploadStatus === 'pending' ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizing...</>
-                : <><Send className="mr-2 h-4 w-4" /> Submit & Moderate</>}
-              </Button>
-            </div>
-
-            <div className="space-y-3 mt-2">
-              {Object.entries(uploadProgressMap).filter(([k]) => k.endsWith('-to-backend') || (!k.endsWith('-to-backend') && !k.includes('-to-backend'))).map(([k, v]) => (
-                <div key={k}>
-                  <div className="flex justify-between text-xs text-gray-400 mb-1">
-                    <span>{k.endsWith('-to-backend') ? 'Client → Server' : 'Server → Drive'}</span>
-                    <span>{v === -1 ? 'Error' : `${v}%`}</span>
-                  </div>
-                  <ProgressBar percent={v === -1 ? 100 : v} />
+      {/* PREVIEW SECTION */}
+      <div className="mb-6 bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
+        
+        {/* --- FILE PREVIEW --- */}
+        {mode === 'file-preview' && selectedFile && (
+            <>
+                <div className="p-2 bg-gray-900 border-b border-gray-700 flex items-center">
+                    <img src={selectedFile.iconUrl} alt="" className="w-4 h-4 mr-2" />
+                    <span className="text-sm text-white truncate">{selectedFile.name}</span>
                 </div>
-              ))}
+                <div className="relative w-full h-[600px] bg-gray-950 flex items-center justify-center">
+                    <iframe 
+                        src={`https://drive.google.com/file/d/${selectedFile.id}/preview`} 
+                        className="w-full h-full" 
+                        title="File Preview"
+                    ></iframe>
+                </div>
+            </>
+        )}
+
+        {/* --- VIDEO PREVIEW --- */}
+        {mode === 'video-entry' && (
+            <div className="p-4 space-y-3">
+                <Input 
+                    label="Paste Video URL" 
+                    id="vidUrl" 
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={videoUrl} 
+                    onChange={(e) => setVideoUrl(e.target.value)} 
+                />
+                {getYoutubeEmbed(videoUrl) ? (
+                    <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
+                        <iframe 
+                            src={getYoutubeEmbed(videoUrl)} 
+                            className="w-full h-full" 
+                            title="Video Preview" 
+                            allowFullScreen
+                        ></iframe>
+                    </div>
+                ) : (
+                    <div className="w-full h-24 bg-gray-900 rounded-lg flex items-center justify-center text-gray-500 text-sm border border-gray-700 border-dashed">
+                        Video preview will appear here
+                    </div>
+                )}
             </div>
-          </div>
         )}
+      </div>
 
-        {!file && (
-          <div className="flex gap-3">
-            <Button type="button" variant="outline" className="w-full" onClick={openDrivePicker}>
-              Choose from Drive
-            </Button>
-          </div>
-        )}
+      {/* COMMON FIELDS */}
+      <div className="space-y-4">
+        <Input 
+            label="Title" 
+            id="customTitle" 
+            value={customTitle} 
+            onChange={(e) => setCustomTitle(e.target.value)} 
+            placeholder="e.g. Intro to Data Structures"
+        />
 
-        <p className="text-sm text-gray-400 text-center">Files are securely stored via the Google Drive API and must pass Hive Moderation.</p>
-      </form>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select label="Semester" id="semester" value={semester} onChange={(e) => setSemester(e.target.value)} required>
+            <option value="">Select Semester...</option>
+            {syllabusData.semesters.map(sem => (<option key={sem.value} value={sem.value}>{sem.name}</option>))}
+            </Select>
+
+            <Select label="Subject" id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} required>
+            <option value="">Select Subject...</option>
+            {syllabusData.subjects.map(subj => (<option key={subj} value={subj}>{subj}</option>))}
+            </Select>
+        </div>
+
+        {/* TAGS SECTION */}
+        <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-300">Tags (Optional)</label>
+            <div className="flex space-x-2">
+                <input 
+                    className="flex h-10 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    placeholder="Type tag & press Enter..."
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={handleTagKeyDown}
+                />
+                <Button type="button" variant="secondary" onClick={handleAddTag}>Add</Button>
+            </div>
+            
+            <div className="flex flex-wrap gap-2 mt-2 min-h-[24px]">
+                {tags.map((tag, index) => (
+                    <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900/50 text-blue-200 border border-blue-800">
+                        {tag}
+                        <button 
+                            type="button" 
+                            onClick={() => handleRemoveTag(tag)} 
+                            className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-blue-400 hover:bg-blue-800 hover:text-white focus:outline-none"
+                        >
+                            <span className="sr-only">Remove tag</span>
+                            &times;
+                        </button>
+                    </span>
+                ))}
+                {tags.length === 0 && <span className="text-xs text-gray-500 italic">No tags added yet.</span>}
+            </div>
+        </div>
+
+        <Button 
+            onClick={handleSubmit} 
+            disabled={isSubmitting} 
+            className="w-full mt-4 text-lg h-12"
+        >
+            {isSubmitting ? <><Loader2 className="animate-spin mr-2" /> Publishing...</> : <><Send className="mr-2" /> Post Material</>}
+        </Button>
+      </div>
     </div>
   );
 };
+  
 
 
 
