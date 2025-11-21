@@ -5,10 +5,15 @@ const NoteSchema = new mongoose.Schema({
   subject: { type: String, required: true },
   semester: { type: String, required: true },
   uploader: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  googleDriveFileId: { type: String, required: false }, 
-  websiteUrl: { type: String, trim: true, default: '' },
-  videoUrl: { type: String, trim: true, default: '' },
+  
+  // Google Drive Specifics
+  googleDriveFileId: { type: String }, 
+  websiteUrl: { type: String }, 
+  thumbnailUrl: { type: String }, // <--- ADD THIS FIELD
+  
+  videoUrl: { type: String },
   tags: { type: [String], default: [] },
+  
   downloads: { type: Number, default: 0 },
   avgRating: { type: Number, default: 0 },
   reviewCount: { type: Number, default: 0 }

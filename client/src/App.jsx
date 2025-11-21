@@ -1,22 +1,22 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import ReactDOM from 'react-dom/client';
+// REMOVED: import ReactDOM from 'react-dom/client'; <-- Not needed here
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Loader2 } from 'lucide-react';
 import axios from 'axios';
 
 // Local Imports
-import './index.css'; // Assuming CSS is here
+import './index.css'; 
 import { API_BASE_URL, mockNoteList } from './data/constants';
-import './utils/api'; // Import to register interceptors
+import './utils/api'; 
 import { AuthContext } from './context/AuthContext';
 import { ToastContext, NotificationProvider } from './context/ToastContext';
 
 // Pages & Components
 import HomePage from './pages/HomePage';
-import AuthForm from './pages/AuthPage'; // Assuming you extract AuthForm there
+import AuthForm from './pages/AuthPage'; 
 import UserDashboard from './pages/Dashboard';
-import NoteDetailPage from './pages/NoteDetailPage'; // Assuming extracted
+import NoteDetailPage from './pages/NoteDetailPage'; 
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -30,6 +30,7 @@ const GoogleAuthCallback = () => {
 
   useEffect(() => {
     const code = searchParams.get("code");
+
     if (!code) {
       const errorMsg = searchParams.get("error") || "Authentication cancelled.";
       if (!handledRef.current) {
@@ -39,18 +40,23 @@ const GoogleAuthCallback = () => {
       navigate("/login");
       return;
     }
+
     if (handledRef.current) return;
     handledRef.current = true;
 
-    fetch("http://localhost:3001/api/auth/google/callback", {
+    fetch(`${API_BASE_URL}/api/auth/google/callback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
     })
     .then(async (res) => {
       const data = await res.json();
-      onAuthSuccess(data.accessToken, data.user, data.refreshToken, data.googleAccessToken, data.googleRefreshToken);
-      navigate("/dashboard");
+      if (res.ok) {
+        onAuthSuccess(data.accessToken, data.user, data.refreshToken, data.googleAccessToken, data.googleRefreshToken);
+        navigate("/dashboard");
+      } else {
+        throw new Error(data.message || "Login failed");
+      }
     })
     .catch((err) => {
       console.error("Error in GoogleAuthCallback:", err);
@@ -81,8 +87,9 @@ const App = () => {
   const [authToken, setAuthToken] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [currentDashboardView, setCurrentDashboardView] = useState('main'); 
-  const [allNotes, setAllNotes] = useState(mockNoteList); // Init with mock
+  const [allNotes, setAllNotes] = useState(mockNoteList); 
   const [user, setUser] = useState(null);
+  
   const [googleAccessToken, setGoogleAccessToken] = useState(null);
   const [googleRefreshToken, setGoogleRefreshToken] = useState(null);
   const [refreshToken, setRefreshToken] = useState(null);
@@ -108,6 +115,7 @@ const App = () => {
     setRefreshToken(refreshToken);
     setGoogleAccessToken(googleAccessToken || null);
     setGoogleRefreshToken(googleRefreshToken || null);
+    
     localStorage.setItem("authToken", accessToken);
     localStorage.setItem("refreshToken", refreshToken);
     if (googleAccessToken) localStorage.setItem("googleAccessToken", googleAccessToken);
@@ -116,15 +124,18 @@ const App = () => {
 
   const onLogout = () => {
     const token = localStorage.getItem("authToken");
-    fetch(`${API_BASE_URL}/api/auth/logout`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` }
-    }).finally(() => {
-      localStorage.clear();
-      setUser(null);
-      setAuthToken(null);
-      navigate("/login");
-    });
+    if (token) {
+        fetch(`${API_BASE_URL}/api/auth/logout`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` }
+        }).catch(console.error);
+    }
+    
+    localStorage.clear();
+    setUser(null);
+    setAuthToken(null);
+    setGoogleAccessToken(null);
+    navigate("/login");
   };
 
   const refreshAccessToken = async () => {
@@ -153,6 +164,7 @@ const App = () => {
       const refreshToken = localStorage.getItem("refreshToken");
       
       if (token) setAuthToken(token);
+      
       const gToken = localStorage.getItem("googleAccessToken");
       if (gToken) setGoogleAccessToken(gToken);
 
@@ -166,7 +178,7 @@ const App = () => {
           const res = await axios.get(`${API_BASE_URL}/api/auth/me`);
           if (mounted) { setUser(res.data.user); setAuthChecked(true); }
           return;
-        } catch (err) { /* expired, try refresh */ }
+        } catch (err) { /* expired */ }
       }
 
       const newToken = await refreshAccessToken();
@@ -193,7 +205,11 @@ const App = () => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, authToken, refreshToken, googleAccessToken, googleRefreshToken, setUser, setAuthToken, setRefreshToken, setGoogleAccessToken, setGoogleRefreshToken, onAuthSuccess }}>
+    <AuthContext.Provider value={{ 
+        user, authToken, refreshToken, googleAccessToken, googleRefreshToken, 
+        setUser, setAuthToken, setRefreshToken, setGoogleAccessToken, setGoogleRefreshToken, 
+        onAuthSuccess 
+    }}>
       <Routes>
         <Route path="/" element={<HomePage onNavigate={onNavigate} />} />
         <Route path="/login" element={<AuthForm type="Login" onNavigate={onNavigate} onAuthSuccess={onAuthSuccess} />} />
@@ -235,8 +251,12 @@ const App = () => {
   );
 };
 
+// --- Wrapper to Provide OAuth & Router Context ---
 const AppWrapper = () => (
-  <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID} scope="email profile openid https://www.googleapis.com/auth/drive.file">
+  <GoogleOAuthProvider 
+    clientId={GOOGLE_CLIENT_ID} 
+    scope="email profile openid https://www.googleapis.com/auth/drive.readonly"
+  >
     <BrowserRouter>
       <NotificationProvider> 
         <App /> 
@@ -245,4 +265,5 @@ const AppWrapper = () => (
   </GoogleOAuthProvider>
 );
 
-ReactDOM.createRoot(document.getElementById('root')).render(<AppWrapper />);
+// --- EXPORT instead of Render ---
+export default AppWrapper;

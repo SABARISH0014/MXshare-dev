@@ -1,12 +1,12 @@
 import fs from 'fs';
 import { google } from 'googleapis';
+import { Readable } from 'stream'; // <--- THIS IS THE FIX
 import { robotDrive } from '../utils/robotDrive.js';
 import { Note } from '../models/Note.js';
 
 const CENTRAL_FOLDER_ID = process.env.CENTRAL_FOLDER_ID;
 
 // --- HELPER: Permissions ---
-// This ensures students can actually view/download the file after it's stored.
 const makeFilePublic = async (fileId) => {
   try {
     await robotDrive.permissions.create({
@@ -56,15 +56,23 @@ export const getHomepageNotes = async (req, res) => {
 // ==========================================
 
 // --- A. UPLOAD LOCAL FILE (Computer -> Server -> Robot Drive) ---
-// This is used when the user selects "Computer" in the UI.
 export const uploadLocalFile = async (req, res) => {
   try {
-    // 1. Check if Multer received the file
     if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
     
     const { name, subject, semester, tags } = req.body;
 
-    // 2. Upload Stream to Robot Drive (Central Storage)
+    // Robust Tag Parsing
+    let parsedTags = [];
+    if (tags) {
+        try {
+            parsedTags = JSON.parse(tags);
+        } catch (e) {
+            parsedTags = [tags]; // Fallback if it's just a string
+        }
+    }
+
+    // Upload Stream to Robot Drive
     const response = await robotDrive.files.create({
       requestBody: {
         name: name || req.file.originalname,
@@ -74,19 +82,18 @@ export const uploadLocalFile = async (req, res) => {
         mimeType: req.file.mimetype,
         body: fs.createReadStream(req.file.path),
       },
-      // We request 'webViewLink' (for users to click) and 'thumbnailLink' (for previews)
       fields: 'id, webViewLink, thumbnailLink', 
     });
 
-    // 3. Cleanup local temp file (Important!)
+    // Cleanup local temp file
     if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
     }
 
-    // 4. Set Public Permissions
+    // Set Permissions
     await makeFilePublic(response.data.id);
 
-    // 5. Save Metadata to MongoDB
+    // Save Metadata to MongoDB
     const newNote = new Note({
       title: name || req.file.originalname,
       subject,
@@ -94,14 +101,12 @@ export const uploadLocalFile = async (req, res) => {
       uploader: req.user.id,
       googleDriveFileId: response.data.id,
       websiteUrl: response.data.webViewLink,
-      // If your Note schema supports thumbnails, save it here:
-      // thumbnailUrl: response.data.thumbnailLink, 
-      tags: tags ? JSON.parse(tags) : [], // Tags come as string from FormData
+      thumbnailUrl: response.data.thumbnailLink, 
+      tags: parsedTags,
     });
 
     await newNote.save();
 
-    // 6. Notify via Socket.IO (Optional)
     if (req.io) {
         req.io.emit('fileUploaded', { 
             message: `New material: ${newNote.title}`, 
@@ -113,30 +118,29 @@ export const uploadLocalFile = async (req, res) => {
 
   } catch (error) {
     console.error('Local Upload Error:', error);
-    // Cleanup temp file if upload crashed
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ message: 'Upload failed', detail: error.message });
   }
 };
 
 // --- B. IMPORT FROM DRIVE (User Drive -> Robot Drive) ---
-// This is used when the user selects "Google Drive" Picker in the UI.
 export const importFromDrive = async (req, res) => {
   try {
-    const { userFileId, googleToken, name, subject, semester, tags } = req.body;
+    // Note: 'cleanup' flag is extracted if passed from frontend
+    const { userFileId, googleToken, name, subject, semester, tags, cleanup } = req.body;
 
-    // 1. Authenticate as the USER to read the file
+    // Authenticate as USER to read
     const userAuth = new google.auth.OAuth2();
     userAuth.setCredentials({ access_token: googleToken });
     const userDrive = google.drive({ version: 'v3', auth: userAuth });
 
-    // 2. Get the file stream
+    // Get stream
     const sourceStream = await userDrive.files.get(
       { fileId: userFileId, alt: 'media' },
       { responseType: 'stream' }
     );
 
-    // 3. Pipe Stream to Robot Drive (Cloning)
+    // Write stream to Robot Drive
     const response = await robotDrive.files.create({
       requestBody: {
         name: name || 'Imported File',
@@ -148,10 +152,8 @@ export const importFromDrive = async (req, res) => {
       fields: 'id, webViewLink, thumbnailLink',
     });
 
-    // 4. Set Public Permissions
     await makeFilePublic(response.data.id);
 
-    // 5. Save Metadata to MongoDB
     const newNote = new Note({
       title: name,
       subject,
@@ -159,10 +161,21 @@ export const importFromDrive = async (req, res) => {
       uploader: req.user.id,
       googleDriveFileId: response.data.id,
       websiteUrl: response.data.webViewLink,
-      tags: tags || [], // Tags come as JSON array from body
+      thumbnailUrl: response.data.thumbnailLink,
+      tags: tags || [], 
     });
 
     await newNote.save();
+
+    // CLEANUP: Delete from User Drive if requested
+    if (cleanup) {
+        try {
+            await userDrive.files.delete({ fileId: userFileId });
+            console.log(`Cleaned up file from user drive: ${userFileId}`);
+        } catch (e) {
+            console.warn("Cleanup warning (User might lack 'drive.file' scope):", e.message);
+        }
+    }
 
     if (req.io) {
         req.io.emit('fileUploaded', { 
@@ -179,19 +192,59 @@ export const importFromDrive = async (req, res) => {
   }
 };
 
-// --- C. SAVE VIDEO REFERENCE (Link Only) ---
+// --- C. SAVE VIDEO REFERENCE ---
 export const saveDriveReference = async (req, res) => {
     try {
       const { videoUrl, name, subject, semester, tags } = req.body;
+      
+      console.log("Creating .url file for:", videoUrl);
+
+      // 1. Create the content of an Internet Shortcut file
+      // This format is recognized by Windows/Mac/Drive as a link
+      const fileContent = `[InternetShortcut]\nURL=${videoUrl}`;
+      
+      // 2. Convert that string into a Stream (like a real file)
+      const mediaStream = Readable.from([fileContent]);
+
+      // 3. Upload the Stream to Robot Drive
+      const response = await robotDrive.files.create({
+        requestBody: {
+          name: `${name || 'Video Link'}.url`, // Must end in .url
+          parents: [CENTRAL_FOLDER_ID],
+          mimeType: 'text/plain', // Plain text allows previewing the link content
+          description: `Video Link: ${videoUrl}`
+        },
+        media: {
+          mimeType: 'text/plain',
+          body: mediaStream
+        },
+        fields: 'id, webViewLink, thumbnailLink', 
+      });
+
+      // 4. Set Permissions (Public Read)
+      try {
+        await robotDrive.permissions.create({
+          fileId: response.data.id,
+          requestBody: { role: 'reader', type: 'anyone' },
+        });
+      } catch (pErr) {
+          console.warn("Perms warning:", pErr.message);
+      }
   
+      // 5. Save to MongoDB
       const newNote = new Note({
         title: name || 'Video Resource',
         subject,
         semester,
         uploader: req.user.id,
+        
+        // Save BOTH the original link AND the Drive File ID
         videoUrl: videoUrl,
-        websiteUrl: videoUrl, // For videos, the "website" is the video itself
-        tags: tags || [],
+        googleDriveFileId: response.data.id,
+        websiteUrl: response.data.webViewLink, // This opens the file in Drive
+        thumbnailUrl: response.data.thumbnailLink,
+        
+        tags: tags ? JSON.parse(tags) : [],
       });
   
       await newNote.save();
@@ -203,7 +256,7 @@ export const saveDriveReference = async (req, res) => {
         });
       }
 
-      return res.status(201).json({ message: 'Video saved successfully.', note: newNote });
+      return res.status(201).json({ message: 'Video saved as file in Drive & DB.', note: newNote });
   
     } catch (err) {
       console.error('Save Video Error:', err);

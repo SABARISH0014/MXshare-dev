@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { User, Calendar, Eye, Star } from 'lucide-react';
-import { Button } from '../components/ui/Primitives';
+import { Button } from '../components/ui/primitives';
 import { ToastContext } from '../context/ToastContext';
 import { AuthContext } from '../context/AuthContext';
 import { API_BASE_URL } from '../data/constants';
