@@ -59,9 +59,17 @@ export const googleCallback = async (req, res) => {
     const appRefreshToken = generateRefreshTokenString();
     await addRefreshTokenToUser(user._id, appRefreshToken);
 
+    // --- THE FIX: Send the full user object (minus secrets) ---
+    // Convert Mongoose document to plain object
+    const fullUser = user.toObject();
+    delete fullUser.password;
+    delete fullUser.refreshTokens;
+    delete fullUser.accessToken;
+    delete fullUser.googleRefreshToken;
+
     return res.status(200).json({
       message: "Login Successful",
-      user: { _id: user._id, name: user.name, email: user.email, googleId: user.googleId },
+      user: fullUser, // <--- Now contains bio, interests, strengths!
       accessToken,
       refreshToken: appRefreshToken,
       googleAccessToken: tokens.access_token || null,
@@ -134,5 +142,35 @@ export const logout = async (req, res) => {
   } catch (err) {
     console.error('Logout error:', err);
     return res.status(500).json({ message: 'Logout failed.' });
+  }
+};
+
+// ==========================================
+// UPDATE PROFILE (Bio, Interests, Strengths)
+// ==========================================
+export const updateProfile = async (req, res) => {
+  try {
+    const { bio, interests, strengths } = req.body;
+    const userId = req.user.id; // Extracted from JWT in middleware
+
+    // Update the user document
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { 
+        bio, 
+        interests, 
+        strengths 
+      },
+      { new: true } // Return the updated document, not the old one
+    ).select('-password -refreshTokens -googleRefreshToken -accessToken');
+
+    if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({ message: "Profile updated successfully", user: updatedUser });
+  } catch (err) {
+    console.error("Update Profile Error:", err);
+    res.status(500).json({ message: "Failed to update profile" });
   }
 };

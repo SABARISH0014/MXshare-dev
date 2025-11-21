@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import { Readable } from 'stream'; // <--- THIS IS THE FIX
 import { robotDrive } from '../utils/robotDrive.js';
 import { Note } from '../models/Note.js';
+import { History } from '../models/History.js';
 
 const CENTRAL_FOLDER_ID = process.env.CENTRAL_FOLDER_ID;
 
@@ -262,4 +263,149 @@ export const saveDriveReference = async (req, res) => {
       console.error('Save Video Error:', err);
       return res.status(500).json({ message: 'Server error saving video.', detail: err.message });
     }
+};
+
+// ... (Keep existing imports and functions) ...
+
+// ==========================================
+// 4. DETAIL & INTERACTION OPERATIONS
+// ==========================================
+
+// --- GET SINGLE NOTE ---
+export const getNoteById = async (req, res) => {
+  try {
+    const note = await Note.findById(req.params.id).populate('uploader', 'name');
+    if (!note) return res.status(404).json({ message: 'Note not found' });
+    return res.status(200).json(note);
+  } catch (err) {
+    console.error('Get Note Error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ==========================================
+// 5. LEADERBOARD AGGREGATION
+// ==========================================
+export const getLeaderboard = async (req, res) => {
+  try {
+    const leaderboard = await Note.aggregate([
+      // 1. Group by Uploader
+      {
+        $group: {
+          _id: "$uploader",
+          totalNotes: { $sum: 1 },
+          avgRating: { $avg: "$avgRating" },
+          totalDownloads: { $sum: "$downloads" }
+        }
+      },
+      // 2. Join with Users collection to get Name
+      {
+        $lookup: {
+          from: "users", // MongoDB collection name is usually lowercase plural
+          localField: "_id",
+          foreignField: "_id",
+          as: "userInfo"
+        }
+      },
+      // 3. Flatten the user array (lookup returns an array)
+      { $unwind: "$userInfo" },
+      // 4. Calculate final Score (Example: 10 pts per upload + (Rating * 20))
+      {
+        $project: {
+          _id: 1,
+          name: "$userInfo.name",
+          department: "MCA", // Static for now, or add to User model
+          notes: "$totalNotes",
+          downloads: "$totalDownloads",
+          rating: { $ifNull: [{ $round: ["$avgRating", 1] }, 0] },
+          // Score Formula: (Notes * 10) + (Downloads * 1) + (Rating * 5)
+          score: { 
+            $add: [
+                { $multiply: ["$totalNotes", 10] }, 
+                "$totalDownloads", 
+                { $multiply: [{ $ifNull: ["$avgRating", 0] }, 5] }
+            ] 
+          } 
+        }
+      },
+      // 5. Sort by Score Descending
+      { $sort: { score: -1 } },
+      // 6. Limit to Top 10
+      { $limit: 10 }
+    ]);
+
+    return res.status(200).json(leaderboard);
+  } catch (err) {
+    console.error('Leaderboard Error:', err);
+    return res.status(500).json({ message: 'Failed to fetch leaderboard.' });
+  }
+};
+
+// --- 1. GET USER HISTORY (For Dashboard) ---
+export const getUserHistory = async (req, res) => {
+  try {
+    const history = await History.find({ user: req.user.id })
+      .populate({
+        path: 'note',
+        populate: { path: 'uploader', select: 'name' } // Get uploader name inside note
+      })
+      .sort({ lastAccessed: -1 }); // Newest first
+
+    // Filter out nulls (in case a note was deleted but history remains)
+    const validHistory = history.filter(item => item.note !== null);
+
+    return res.status(200).json(validHistory);
+  } catch (err) {
+    console.error('Get History Error:', err);
+    return res.status(500).json({ message: 'Failed to fetch history' });
+  }
+};
+
+// --- 2. TRACK DOWNLOAD (With Debug Logs) ---
+export const trackDownload = async (req, res) => {
+  try {
+    const noteId = req.params.id;
+    console.log(`[DEBUG] 1. Request received to track download for Note: ${noteId}`);
+
+    // A. Increment public counter
+    const note = await Note.findByIdAndUpdate(
+      noteId, 
+      { $inc: { downloads: 1 } }, 
+      { new: true }
+    );
+
+    if (!note) {
+        console.error(`[DEBUG] ❌ Note not found in DB!`);
+        return res.status(404).json({ message: "Note not found" });
+    }
+
+    // B. Save to "Notes Used" History
+    console.log(`[DEBUG] 2. Checking User Auth...`);
+    
+    // LOG THE USER OBJECT TO SEE IF AUTH IS WORKING
+    console.log(`[DEBUG] req.user is:`, req.user);
+
+    if (req.user && req.user.id) {
+        console.log(`[DEBUG] 3. User is logged in (ID: ${req.user.id}). Attempting to save History...`);
+        
+        try {
+            const historyEntry = await History.findOneAndUpdate(
+                { user: req.user.id, note: noteId },
+                { lastAccessed: new Date() }, // Update timestamp
+                { upsert: true, new: true }   // Create if it doesn't exist
+            );
+            console.log(`[DEBUG] ✅ History Saved Successfully:`, historyEntry);
+        } catch (dbErr) {
+            console.error(`[DEBUG] ❌ Database Save Error:`, dbErr);
+        }
+
+    } else {
+        console.log(`[DEBUG] ⚠️ Skipping History: User is NOT logged in or Token is missing.`);
+    }
+
+    return res.status(200).json({ downloads: note.downloads });
+  } catch (err) {
+    console.error('[DEBUG] ❌ General Error:', err);
+    return res.status(500).json({ message: 'Error tracking download' });
+  }
 };

@@ -6,7 +6,11 @@ import {
     getHomepageNotes, 
     uploadLocalFile,      // <--- Matches the new controller export
     importFromDrive,      // <--- Matches the new controller export
-    saveDriveReference    // <--- Matches the new controller export
+    saveDriveReference,
+    getNoteById,     // <--- ADD THIS
+    trackDownload,    // <--- Matches the new controller export
+    getLeaderboard, // Ensure this is imported
+    getUserHistory // Ensure this is imported
 } from '../controllers/noteController.js';
 import { getReviews, postReview } from '../controllers/reviewController.js';
 
@@ -18,6 +22,9 @@ const router = express.Router();
 // --- READ ROUTES ---
 router.get('/', getAllNotes);
 router.get('/homepage', getHomepageNotes);
+router.get('/leaderboard', getLeaderboard); // <--- MOVED UP (Before /:id)
+router.get('/history', authenticateJWT, getUserHistory); // <--- MUST BE HERE (Before /:id)
+router.get('/:id', getNoteById); // <--- NEW: Get Single Note
 
 // --- UPLOAD ROUTES ---
 // 1. For files uploaded from Computer (uses Multer)
@@ -28,6 +35,9 @@ router.post('/import-drive', authenticateJWT, importFromDrive);
 
 // 3. For Video Links (JSON body)
 router.post('/save-drive-reference', authenticateJWT, saveDriveReference);
+
+// Interactions
+router.post('/:id/download', authenticateJWT, trackDownload);
 
 // --- REVIEW ROUTES ---
 router.get('/:noteId/reviews', getReviews);

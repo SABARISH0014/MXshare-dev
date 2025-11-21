@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-// REMOVED: import ReactDOM from 'react-dom/client'; <-- Not needed here
+// REMOVED: import ReactDOM from 'react-dom/client'; 
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Loader2 } from 'lucide-react';
@@ -71,15 +71,6 @@ const GoogleAuthCallback = () => {
       <h2 className="mt-4 text-xl font-semibold text-white">Completing login...</h2>
     </div>
   );
-};
-
-// --- Helper for Note Details ---
-const NoteDetailWrapper = () => {
-  const { state } = useLocation(); 
-  if (!state || !state.note) {
-    return <Navigate to="/dashboard" replace />;
-  }
-  return <NoteDetailPage note={state.note} />;
 };
 
 // --- Main App Logic ---
@@ -216,6 +207,7 @@ const App = () => {
         <Route path="/signup" element={<AuthForm type="Signup" onNavigate={onNavigate} onAuthSuccess={onAuthSuccess} />} />
         <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
         
+        {/* DASHBOARD */}
         <Route path="/dashboard" element={
             <ProtectedRoute>
               <UserDashboard
@@ -230,32 +222,35 @@ const App = () => {
           } 
         />
         
-        <Route path="/note/detail" element={
+        {/* NOTE DETAIL PAGE (Corrected ID Routing) */}
+        <Route path="/note/:id" element={
             <ProtectedRoute>
               <UserDashboard
                 user={user}
                 onLogout={onLogout}
                 allNotes={allNotes}
                 setAllNotes={setAllNotes}
-                currentView={currentDashboardView}
+                currentView="detail" // Just to keep dashboard layout active
                 onDashboardViewChange={onDashboardViewChange}
               >
-                <NoteDetailWrapper />
+                <NoteDetailPage />
               </UserDashboard>
             </ProtectedRoute>
           } 
         />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthContext.Provider>
   );
 };
 
-// --- Wrapper to Provide OAuth & Router Context ---
+// --- Wrapper ---
 const AppWrapper = () => (
   <GoogleOAuthProvider 
     clientId={GOOGLE_CLIENT_ID} 
-    scope="email profile openid https://www.googleapis.com/auth/drive.readonly"
+    // Scope: 'drive.file' is needed if you use the "Cleanup" feature (deleting from user drive)
+    scope="email profile openid https://www.googleapis.com/auth/drive.file"
   >
     <BrowserRouter>
       <NotificationProvider> 
@@ -265,5 +260,4 @@ const AppWrapper = () => (
   </GoogleOAuthProvider>
 );
 
-// --- EXPORT instead of Render ---
 export default AppWrapper;
