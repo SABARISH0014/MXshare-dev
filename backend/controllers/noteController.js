@@ -127,143 +127,198 @@ export const uploadLocalFile = async (req, res) => {
 // --- B. IMPORT FROM DRIVE (User Drive -> Robot Drive) ---
 export const importFromDrive = async (req, res) => {
   try {
-    // Note: 'cleanup' flag is extracted if passed from frontend
     const { userFileId, googleToken, name, subject, semester, tags, cleanup } = req.body;
 
-    // Authenticate as USER to read
+    // Authenticate as USER to read file
     const userAuth = new google.auth.OAuth2();
     userAuth.setCredentials({ access_token: googleToken });
     const userDrive = google.drive({ version: 'v3', auth: userAuth });
 
-    // Get stream
-    const sourceStream = await userDrive.files.get(
-      { fileId: userFileId, alt: 'media' },
-      { responseType: 'stream' }
-    );
+    // STEP 1: Try reading the file stream from the user's Drive
+    let sourceStream;
+    try {
+      sourceStream = await userDrive.files.get(
+        { fileId: userFileId, alt: 'media' },
+        { responseType: 'stream' }
+      );
+    } catch (streamErr) {
+      return res.status(400).json({ 
+        message: 'Could not read file from user drive.', 
+        detail: streamErr.message 
+      });
+    }
 
-    // Write stream to Robot Drive
+    // STEP 2: Upload the stream to Robot Drive
+    let robotFile;
+    try {
+      robotFile = await robotDrive.files.create({
+        requestBody: {
+          name: name || "Imported File",
+          parents: [CENTRAL_FOLDER_ID],
+        },
+        media: { body: sourceStream.data },
+        fields: "id, webViewLink, thumbnailLink",
+      });
+    } catch (uploadErr) {
+      return res.status(500).json({
+        message: "Robot drive upload failed",
+        detail: uploadErr.message,
+      });
+    }
+
+    // STEP 3: Make robot file public
+    try {
+      await robotDrive.permissions.create({
+        fileId: robotFile.data.id,
+        requestBody: { role: "reader", type: "anyone" },
+      });
+    } catch (e) {
+      console.warn("Public permission failed:", e.message);
+    }
+
+    // STEP 4: Save in MongoDB
+    let newNote;
+    try {
+      newNote = new Note({
+        title: name,
+        subject,
+        semester,
+        uploader: req.user.id,
+        googleDriveFileId: robotFile.data.id,
+        websiteUrl: robotFile.data.webViewLink,
+        thumbnailUrl: robotFile.data.thumbnailLink,
+        tags: Array.isArray(tags) ? tags : [],
+      });
+
+      await newNote.save();
+    } catch (dbErr) {
+      return res.status(500).json({
+        message: "Database save failed",
+        detail: dbErr.message,
+      });
+    }
+
+    // STEP 5: CLEANUP ONLY IF EVERYTHING ABOVE SUCCEEDED
+    if (cleanup) {
+      try {
+        await userDrive.files.delete({ fileId: userFileId });
+        console.log("✔ Deleted temporary file from user drive:", userFileId);
+      } catch (delErr) {
+        console.warn(
+          "⚠ Cleanup warning (file not deleted, but upload succeeded):",
+          delErr.message
+        );
+      }
+    }
+
+    // STEP 6: Realtime event
+    if (req.io) {
+      req.io.emit("fileUploaded", {
+        message: `Imported material: ${newNote.title}`,
+        note: newNote,
+      });
+    }
+
+    return res.status(201).json({
+      message: "Imported successfully",
+      note: newNote,
+    });
+
+  } catch (err) {
+    console.error("Drive Import Error:", err);
+    return res.status(500).json({
+      message: "Import failed",
+      detail: err.message,
+    });
+  }
+};
+
+
+// --- C. SAVE VIDEO REFERENCE ---
+// --- C. SAVE VIDEO REFERENCE ---
+export const saveDriveReference = async (req, res) => {
+  try {
+    const { videoUrl, name, subject, semester, tags } = req.body;
+
+    console.log("Creating .url file for:", videoUrl);
+
+    // 1. Safe tag parsing
+    let parsedTags = [];
+    if (Array.isArray(tags)) {
+      parsedTags = tags;
+    } else if (typeof tags === "string") {
+      try {
+        parsedTags = JSON.parse(tags);
+      } catch {
+        parsedTags = [tags];
+      }
+    }
+
+    // 2. Create .url file content
+    const fileContent = `[InternetShortcut]\nURL=${videoUrl}`;
+    const mediaStream = Readable.from([fileContent]);
+
+    // 3. Upload to Drive
     const response = await robotDrive.files.create({
       requestBody: {
-        name: name || 'Imported File',
+        name: `${name || 'Video Link'}.url`,
         parents: [CENTRAL_FOLDER_ID],
+        mimeType: 'text/plain',
+        description: `Video Link: ${videoUrl}`
       },
       media: {
-        body: sourceStream.data,
+        mimeType: 'text/plain',
+        body: mediaStream
       },
       fields: 'id, webViewLink, thumbnailLink',
     });
 
-    await makeFilePublic(response.data.id);
+    // 4. Permissions
+    try {
+      await robotDrive.permissions.create({
+        fileId: response.data.id,
+        requestBody: { role: 'reader', type: 'anyone' },
+      });
+    } catch (pErr) {
+      console.warn("Perms warning:", pErr.message);
+    }
 
+    // 5. Save DB Entry
     const newNote = new Note({
-      title: name,
+      title: name || 'Video Resource',
       subject,
       semester,
       uploader: req.user.id,
+      videoUrl,
       googleDriveFileId: response.data.id,
       websiteUrl: response.data.webViewLink,
       thumbnailUrl: response.data.thumbnailLink,
-      tags: tags || [], 
+      tags: parsedTags,
     });
 
     await newNote.save();
 
-    // CLEANUP: Delete from User Drive if requested
-    if (cleanup) {
-        try {
-            await userDrive.files.delete({ fileId: userFileId });
-            console.log(`Cleaned up file from user drive: ${userFileId}`);
-        } catch (e) {
-            console.warn("Cleanup warning (User might lack 'drive.file' scope):", e.message);
-        }
-    }
-
     if (req.io) {
-        req.io.emit('fileUploaded', { 
-            message: `Imported material: ${newNote.title}`, 
-            note: newNote 
-        });
+      req.io.emit('fileUploaded', { 
+          message: `New video: ${newNote.title}`, 
+          note: newNote 
+      });
     }
 
-    res.status(201).json({ message: 'Imported successfully', note: newNote });
+    return res.status(201).json({
+      message: 'Video saved as file in Drive & DB.',
+      note: newNote
+    });
 
-  } catch (error) {
-    console.error('Drive Import Error:', error);
-    res.status(500).json({ message: 'Import failed', detail: error.message });
+  } catch (err) {
+    console.error('Save Video Error:', err);
+    return res.status(500).json({ 
+      message: 'Server error saving video.', 
+      detail: err.message 
+    });
   }
 };
 
-// --- C. SAVE VIDEO REFERENCE ---
-export const saveDriveReference = async (req, res) => {
-    try {
-      const { videoUrl, name, subject, semester, tags } = req.body;
-      
-      console.log("Creating .url file for:", videoUrl);
-
-      // 1. Create the content of an Internet Shortcut file
-      // This format is recognized by Windows/Mac/Drive as a link
-      const fileContent = `[InternetShortcut]\nURL=${videoUrl}`;
-      
-      // 2. Convert that string into a Stream (like a real file)
-      const mediaStream = Readable.from([fileContent]);
-
-      // 3. Upload the Stream to Robot Drive
-      const response = await robotDrive.files.create({
-        requestBody: {
-          name: `${name || 'Video Link'}.url`, // Must end in .url
-          parents: [CENTRAL_FOLDER_ID],
-          mimeType: 'text/plain', // Plain text allows previewing the link content
-          description: `Video Link: ${videoUrl}`
-        },
-        media: {
-          mimeType: 'text/plain',
-          body: mediaStream
-        },
-        fields: 'id, webViewLink, thumbnailLink', 
-      });
-
-      // 4. Set Permissions (Public Read)
-      try {
-        await robotDrive.permissions.create({
-          fileId: response.data.id,
-          requestBody: { role: 'reader', type: 'anyone' },
-        });
-      } catch (pErr) {
-          console.warn("Perms warning:", pErr.message);
-      }
-  
-      // 5. Save to MongoDB
-      const newNote = new Note({
-        title: name || 'Video Resource',
-        subject,
-        semester,
-        uploader: req.user.id,
-        
-        // Save BOTH the original link AND the Drive File ID
-        videoUrl: videoUrl,
-        googleDriveFileId: response.data.id,
-        websiteUrl: response.data.webViewLink, // This opens the file in Drive
-        thumbnailUrl: response.data.thumbnailLink,
-        
-        tags: tags ? JSON.parse(tags) : [],
-      });
-  
-      await newNote.save();
-
-      if (req.io) {
-        req.io.emit('fileUploaded', { 
-            message: `New video: ${newNote.title}`, 
-            note: newNote 
-        });
-      }
-
-      return res.status(201).json({ message: 'Video saved as file in Drive & DB.', note: newNote });
-  
-    } catch (err) {
-      console.error('Save Video Error:', err);
-      return res.status(500).json({ message: 'Server error saving video.', detail: err.message });
-    }
-};
 
 // ... (Keep existing imports and functions) ...
 

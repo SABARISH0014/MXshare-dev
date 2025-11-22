@@ -1,23 +1,20 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-// REMOVED: import ReactDOM from 'react-dom/client'; 
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Loader2 } from 'lucide-react';
 import axios from 'axios';
 
-// Local Imports
 import './index.css'; 
 import { API_BASE_URL, mockNoteList } from './data/constants';
 import './utils/api'; 
 import { AuthContext } from './context/AuthContext';
 import { ToastContext, NotificationProvider } from './context/ToastContext';
 
-// Pages & Components
 import HomePage from './pages/HomePage';
 import AuthForm from './pages/AuthPage'; 
 import UserDashboard from './pages/Dashboard';
 import NoteDetailPage from './pages/NoteDetailPage'; 
-import AdminPage from './pages/AdminPage';
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 // --- Google Auth Callback ---
@@ -30,7 +27,6 @@ const GoogleAuthCallback = () => {
 
   useEffect(() => {
     const code = searchParams.get("code");
-
     if (!code) {
       const errorMsg = searchParams.get("error") || "Authentication cancelled.";
       if (!handledRef.current) {
@@ -40,7 +36,6 @@ const GoogleAuthCallback = () => {
       navigate("/login");
       return;
     }
-
     if (handledRef.current) return;
     handledRef.current = true;
 
@@ -73,7 +68,12 @@ const GoogleAuthCallback = () => {
   );
 };
 
-// --- Main App Logic ---
+const NoteDetailWrapper = () => {
+  const { state } = useLocation(); 
+  if (!state || !state.note) return <Navigate to="/dashboard" replace />;
+  return <NoteDetailPage note={state.note} />;
+};
+
 const App = () => {
   const [authToken, setAuthToken] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -121,20 +121,17 @@ const App = () => {
             headers: { Authorization: `Bearer ${token}` }
         }).catch(console.error);
     }
-    
     localStorage.clear();
     setUser(null);
     setAuthToken(null);
     setGoogleAccessToken(null);
-    navigate("/login");
+    setRefreshToken(null);
+    if (window.location.pathname !== '/login') navigate("/login");
   };
 
   const refreshAccessToken = async () => {
     const rToken = localStorage.getItem('refreshToken');
-    if (!rToken) {
-       onLogout();
-       return false;
-    }
+    if (!rToken) return false;
     try {
        const res = await axios.post(`${API_BASE_URL}/api/auth/refresh`, { refreshToken: rToken });
        const { accessToken, refreshToken } = res.data;
@@ -143,46 +140,82 @@ const App = () => {
        setAuthToken(accessToken);
        return accessToken; 
     } catch (err) {
-       onLogout();
+       console.warn("Refresh failed, logging out.");
        return false;
     }
   };
 
   useEffect(() => {
     let mounted = true;
+
     const checkSession = async () => {
       const token = localStorage.getItem("authToken");
-      const refreshToken = localStorage.getItem("refreshToken");
+      const rToken = localStorage.getItem("refreshToken");
       
-      if (token) setAuthToken(token);
-      
+      // Load any existing Google Token first
       const gToken = localStorage.getItem("googleAccessToken");
       if (gToken) setGoogleAccessToken(gToken);
 
-      if (!token && !refreshToken) {
+      if (!token && !rToken) {
         if (mounted) { setUser(null); setAuthChecked(true); }
         return;
       }
 
       if (token) {
         try {
-          const res = await axios.get(`${API_BASE_URL}/api/auth/me`);
-          if (mounted) { setUser(res.data.user); setAuthChecked(true); }
+          setAuthToken(token); 
+          const res = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+             headers: { Authorization: `Bearer ${token}` } 
+          });
+
+          if (mounted) { 
+              setUser(res.data.user); 
+              setAuthChecked(true);
+              
+              // --- THE CRITICAL FIX ---
+              if (res.data.googleAccessToken) {
+                  console.log("✅ SAVING NEW GOOGLE TOKEN from Backend");
+                  setGoogleAccessToken(res.data.googleAccessToken);
+                  localStorage.setItem("googleAccessToken", res.data.googleAccessToken);
+              } else {
+                  console.log("ℹ️ No Google Token returned from backend.");
+              }
+              // ------------------------
+          }
           return;
-        } catch (err) { /* expired */ }
+        } catch (err) { 
+          console.warn("Token invalid, attempting refresh..."); 
+        }
       }
 
       const newToken = await refreshAccessToken();
+      
       if (newToken) {
         try {
-          const res = await axios.get(`${API_BASE_URL}/api/auth/me`);
-          if (mounted) { setUser(res.data.user); setAuthChecked(true); }
+          const res = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+             headers: { Authorization: `Bearer ${newToken}` }
+          });
+          if (mounted) { 
+              setUser(res.data.user); 
+              setAuthChecked(true); 
+              // Capture token on refresh too
+              if (res.data.googleAccessToken) {
+                  setGoogleAccessToken(res.data.googleAccessToken);
+                  localStorage.setItem("googleAccessToken", res.data.googleAccessToken);
+              }
+          }
           return;
-        } catch (err) { onLogout(); }
+        } catch (err) { 
+          console.error("Session restore failed after refresh.");
+        }
       }
 
-      if (mounted) { setUser(null); setAuthChecked(true); }
+      if (mounted) { 
+          onLogout();
+          setAuthChecked(true); 
+      }
     };
+
     checkSession();
     return () => (mounted = false);
   }, []);
@@ -206,8 +239,7 @@ const App = () => {
         <Route path="/login" element={<AuthForm type="Login" onNavigate={onNavigate} onAuthSuccess={onAuthSuccess} />} />
         <Route path="/signup" element={<AuthForm type="Signup" onNavigate={onNavigate} onAuthSuccess={onAuthSuccess} />} />
         <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
-        <Route path="/admin" element={<AdminPage />} />
-        {/* DASHBOARD */}
+        
         <Route path="/dashboard" element={
             <ProtectedRoute>
               <UserDashboard
@@ -222,7 +254,6 @@ const App = () => {
           } 
         />
         
-        {/* NOTE DETAIL PAGE (Corrected ID Routing) */}
         <Route path="/note/:id" element={
             <ProtectedRoute>
               <UserDashboard
@@ -230,7 +261,7 @@ const App = () => {
                 onLogout={onLogout}
                 allNotes={allNotes}
                 setAllNotes={setAllNotes}
-                currentView="detail" // Just to keep dashboard layout active
+                currentView="detail" 
                 onDashboardViewChange={onDashboardViewChange}
               >
                 <NoteDetailPage />
@@ -245,11 +276,9 @@ const App = () => {
   );
 };
 
-// --- Wrapper ---
 const AppWrapper = () => (
   <GoogleOAuthProvider 
     clientId={GOOGLE_CLIENT_ID} 
-    // Scope: 'drive.file' is needed if you use the "Cleanup" feature (deleting from user drive)
     scope="email profile openid https://www.googleapis.com/auth/drive.file"
   >
     <BrowserRouter>
