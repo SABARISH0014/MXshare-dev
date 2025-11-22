@@ -17,7 +17,7 @@ import HomePage from './pages/HomePage';
 import AuthForm from './pages/AuthPage'; 
 import UserDashboard from './pages/Dashboard';
 import NoteDetailPage from './pages/NoteDetailPage'; 
-
+import AdminPage from './pages/AdminPage';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 // --- Google Auth Callback ---
@@ -206,7 +206,7 @@ const App = () => {
         <Route path="/login" element={<AuthForm type="Login" onNavigate={onNavigate} onAuthSuccess={onAuthSuccess} />} />
         <Route path="/signup" element={<AuthForm type="Signup" onNavigate={onNavigate} onAuthSuccess={onAuthSuccess} />} />
         <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
-        
+        <Route path="/admin" element={<AdminPage />} />
         {/* DASHBOARD */}
         <Route path="/dashboard" element={
             <ProtectedRoute>

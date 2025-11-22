@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { Button, Input } from '../components/ui/primitives';
+import { Button } from '../components/ui/primitives';
 import { ToastContext } from '../context/ToastContext';
 
 const EMAIL_REGEX = /^\d+[a-zA-Z]+\d+@psgtech\.ac\.in$/i;
@@ -9,10 +9,7 @@ const EMAIL_REGEX = /^\d+[a-zA-Z]+\d+@psgtech\.ac\.in$/i;
 const AuthForm = ({ type, onNavigate, onAuthSuccess }) => {
   const isLogin = type === "Login";
   const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
+    name: "", email: "", password: "", confirmPassword: ""
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -26,81 +23,139 @@ const AuthForm = ({ type, onNavigate, onAuthSuccess }) => {
   const googleLogin = useGoogleLogin({
     flow: "auth-code",
     ux_mode: "redirect",
-    access_type: "offline",
-    prompt: "consent",
-    include_granted_scopes: true,
-    scope: "openid profile email https://www.googleapis.com/auth/drive.file",
     redirect_uri: "http://localhost:5173/auth/google/callback",
-    onError: () => addToast("Google Sign-In failed.", "error"),
+    onError: () => addToast("Google login failed", "error"),
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!EMAIL_REGEX.test(formData.email)) {
-      setError("Access restricted: Please use your official MCA roll no. (e.g., 25MX343@psgtech.ac.in).");
+      setError("Use your official MCA email only (e.g., 25MX343@psgtech.ac.in)");
       return;
     }
     if (!isLogin && formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match.");
+      setError("Passwords do not match");
       return;
     }
 
     setIsLoading(true);
-    setError("");
-    
-    // Simulate network delay or call real API here
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await new Promise(r => setTimeout(r, 1200));
 
-    try {
-      const mockUser = {
-        name: isLogin ? formData.email.split("@")[0] : formData.name,
-        email: formData.email,
-        _id: "mock_id_" + Date.now(),
-        createdAt: new Date().toISOString(),
-      };
-
-      addToast(`${isLogin ? "Welcome back" : "Welcome aboard"}, MXian!`, "success");
-      onAuthSuccess("mock_local_token_123", mockUser, "mock_local_refresh_token");
-    } catch (err) {
-      setError("A network error occurred.");
-    } finally {
-      setIsLoading(false);
-    }
+    addToast(`Welcome ${isLogin ? "back" : ""}, MXian!`, "success");
+    onAuthSuccess("mock_token", { name: formData.name || formData.email.split("@")[0], email: formData.email });
+    setIsLoading(false);
   };
 
   return (
-    <div className="relative flex justify-center items-center min-h-screen bg-gray-950 p-4">
-      <button onClick={() => onNavigate('')} className="absolute top-8 left-8 flex items-center text-gray-400 hover:text-white transition-colors font-medium">
-        <ArrowLeft className="w-5 h-5 mr-2" /> Back to Home
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center p-4">
+      {/* Back Button */}
+      <button 
+        onClick={() => onNavigate('')} 
+        className="absolute top-6 left-6 flex items-center text-black hover:text-indigo-600 font-medium text-sm sm:text-base"
+      >
+        <ArrowLeft className="w-5 h-5 mr-1" /> Back
       </button>
 
-      <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-xl shadow-2xl p-8 space-y-6">
-        <h2 className="text-3xl font-extrabold text-white text-center">{isLogin ? "Login to MXShare" : "Join MXShare Today"}</h2>
-        <p className="text-center text-sm text-blue-400 font-semibold">MCA Department Access Only</p>
+      {/* Form Card - Perfect Size */}
+      <div className="w-full max-w-sm sm:max-w-md bg-white rounded-2xl shadow-xl p-8">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl sm:text-3xl font-bold text-black">
+            {isLogin ? "Welcome Back" : "Create Account"}
+          </h2>
+          <p className="text-sm sm:text-base font-semibold text-indigo-600 mt-2">MCA Department • MXShare</p>
+        </div>
 
-        <Button onClick={() => googleLogin()} variant="secondary" className="w-full flex items-center justify-center space-x-2" disabled={isLoading}>
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign In with College Google"}
+        {/* Google Button */}
+        <Button 
+          onClick={() => googleLogin()} 
+          variant="secondary" 
+          className="w-full text-sm sm:text-base py-5 mb-6"
+          disabled={isLoading}
+        >
+          Continue with College Google
         </Button>
 
-        <div className="relative flex items-center">
-          <div className="flex-grow border-t border-gray-700"></div>
-          <span className="flex-shrink mx-4 text-gray-400 text-sm">or using email</span>
-          <div className="flex-grow border-t border-gray-700"></div>
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300"></div>
+          </div>
+          <div className="relative flex justify-center text-xs sm:text-sm">
+            <span className="bg-white px-3 text-gray-600 font-medium">or</span>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {error && <p className="text-sm font-medium text-red-500 text-center bg-red-900/20 p-2 rounded-lg">{error}</p>}
-          {!isLogin && <Input label="Full Name" id="name" value={formData.name} onChange={handleChange} required />}
-          <Input label="College Email" id="email" type="email" value={formData.email} onChange={handleChange} required placeholder="25MX343@psgtech.ac.in" />
-          <Input label="Password" id="password" type="password" value={formData.password} onChange={handleChange} required />
-          {!isLogin && <Input label="Confirm Password" id="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} required />}
-          <Button type="submit" className="w-full" disabled={isLoading}>{isLoading ? "Processing..." : (isLogin ? "Sign In Securely" : "Create Account")}</Button>
+          {error && (
+            <div className="bg-red-50 border border-red-300 text-red-700 p-3 rounded-lg text-center text-sm">
+              {error}
+            </div>
+          )}
+
+          {!isLogin && (
+            <input
+              id="name"
+              type="text"
+              placeholder="Full Name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-black placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 text-sm sm:text-base"
+            />
+          )}
+
+          <input
+            id="email"
+            type="email"
+            placeholder="25MX343@psgtech.ac.in"
+            value={formData.email}
+            onChange={handleChange}
+            required
+            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-black placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 text-sm sm:text-base"
+          />
+
+          <input
+            id="password"
+            type="password"
+            placeholder="Password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-black placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 text-sm sm:text-base"
+          />
+
+          {!isLogin && (
+            <input
+              id="confirmPassword"
+              type="password"
+              placeholder="Confirm Password"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-black placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 text-sm sm:text-base"
+            />
+          )}
+
+          {/* Login = Blue | Sign Up = Purple */}
+          <Button 
+            type="submit"
+            disabled={isLoading}
+            className={`w-full font-bold py-3 rounded-lg text-white transition transform hover:scale-105 ${
+              isLogin 
+                ? "bg-blue-600 hover:bg-blue-700" 
+                : "bg-purple-600 hover:bg-purple-700"
+            }`}
+          >
+            {isLoading ? "Please wait..." : (isLogin ? "Login" : "Sign Up")}
+          </Button>
         </form>
 
-        <p className="text-center text-sm text-gray-400">
-          {isLogin ? "Don't have an account?" : "Already an MXian?"}{" "}
-          <button type="button" onClick={() => onNavigate(isLogin ? "signup" : "login")} className="font-medium text-blue-500 hover:text-blue-400 transition-colors">
-            {isLogin ? "Sign Up" : "Log In"}
+        <p className="text-center mt-6 text-sm text-gray-700">
+          {isLogin ? "New here?" : "Already have an account?"}{" "}
+          <button 
+            onClick={() => onNavigate(isLogin ? "signup" : "login")}
+            className="font-bold text-indigo-600 hover:text-indigo-800 underline"
+          >
+            {isLogin ? "Sign Up" : "Login"}
           </button>
         </p>
       </div>

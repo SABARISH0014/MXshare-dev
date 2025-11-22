@@ -10,8 +10,9 @@ import { ToastContext } from '../context/ToastContext';
 import { mockNoteList } from '../data/constants';
 
 const HeroAnimation = () => (
+    // Background icons are now light gray
     <div className="absolute inset-0 w-full h-full overflow-hidden z-0" aria-hidden="true">
-        <BookOpen className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 text-gray-800/50 opacity-50" strokeWidth={1} />
+        <BookOpen className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 text-gray-200/50 opacity-50" strokeWidth={1} />
         <BookOpen className="hero-shared-note hero-note-1 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 text-blue-500 opacity-0" strokeWidth={1.5} />
         <BookOpen className="hero-shared-note hero-note-2 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 text-blue-400 opacity-0" strokeWidth={1.5} />
         <BookOpen className="hero-shared-note hero-note-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 text-blue-500 opacity-0" strokeWidth={1.5} />
@@ -96,15 +97,18 @@ const HomePage = ({ onNavigate }) => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 font-sans transition-colors duration-300">
-      <header className="fixed top-0 left-0 right-0 z-40 bg-gray-950/80 backdrop-blur-md border-b border-gray-800">
+    // Main background is white, text is dark gray
+    <div className="min-h-screen bg-white text-gray-900 font-sans transition-colors duration-300">
+      
+      {/* Header: White background, light gray border */}
+      <header className="fixed top-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Aperture className="w-7 h-7 text-blue-500" />
-            <span className="text-xl font-bold text-white">MXShare</span>
+            <span className="text-xl font-bold text-gray-900">MXShare</span>
           </div>
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={() => onNavigate('login')} className="hidden sm:inline-flex">
+            <Button variant="ghost" onClick={() => onNavigate('login')} className="hidden sm:inline-flex text-gray-700 hover:text-blue-500">
               <LogIn className="w-4 h-4 mr-2" /> Login
             </Button>
             <Button onClick={() => onNavigate('signup')} size="default">
@@ -115,26 +119,30 @@ const HomePage = ({ onNavigate }) => {
       </header>
 
       <div className="relative overflow-hidden pt-16 hero-section">
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-950 to-gray-900 hero-bg"></div>
+        {/* Hero Background: changed to solid white or light gradient */}
+        <div className="absolute inset-0 bg-white hero-bg"></div>
         <HeroAnimation />
         
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-24 relative z-10 text-center">
-          <h1 className="text-6xl sm:text-7xl font-extrabold tracking-tight text-white leading-tight mxshare-title cursor-pointer" ref={titleRef}>
+          {/* Text is dark */}
+          <h1 className="text-6xl sm:text-7xl font-extrabold tracking-tight text-gray-900 leading-tight mxshare-title cursor-pointer" ref={titleRef}>
             MXShare Notes
           </h1>
-          <p className="mt-4 text-3xl text-blue-400 font-light">Collaborate. Share. Learn.</p>
+          <p className="mt-4 text-3xl text-blue-600 font-light">Collaborate. Share. Learn.</p>
           <div className="mt-10 max-w-lg mx-auto flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
             <Button onClick={() => onNavigate('login')} size="lg" className="flex-1 rounded-full">Login Now</Button>
-            <Button onClick={() => onNavigate('signup')} size="lg" variant="outline" className="flex-1 rounded-full">Start Sharing</Button>
+            <Button onClick={() => onNavigate('signup')} size="lg" variant="outline" className="flex-1 rounded-full border-blue-600 text-blue-600 hover:bg-blue-50">Start Sharing</Button>
           </div>
 
-          <div className="mt-12 w-full max-w-2xl mx-auto p-4 bg-gray-900/80 backdrop-blur-md rounded-xl shadow-2xl border border-gray-800 search-teaser">
+          {/* Search Box: White background, light border */}
+          <div className="mt-12 w-full max-w-2xl mx-auto p-4 bg-white rounded-xl shadow-xl border border-gray-300 search-teaser">
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
               <input
                 type="text"
                 placeholder="Search notes, subjects, or contributors..."
-                className="w-full h-14 pl-12 pr-4 text-lg border border-gray-700 bg-gray-800 text-white rounded-xl focus:ring-2 focus-visible:ring-blue-500 focus:border-blue-500 transition-colors"
+                // Input is white/light gray background, dark text
+                className="w-full h-14 pl-12 pr-4 text-lg border border-gray-300 bg-gray-50 text-gray-900 rounded-xl focus:ring-2 focus-visible:ring-blue-500 focus:border-blue-500 transition-colors"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -143,11 +151,11 @@ const HomePage = ({ onNavigate }) => {
         </div>
       </div>
 
-      <div className="py-20 lg:py-32 bg-gray-950">
+      <div className="py-20 lg:py-32 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {searchQuery !== '' ? (
             <div className="mb-16">
-              <h2 className="text-4xl font-extrabold text-white mb-8 text-center">Search Results ({searchResults.length})</h2>
+              <h2 className="text-4xl font-extrabold text-gray-900 mb-8 text-center">Search Results ({searchResults.length})</h2>
               {searchResults.length > 0 ? (
                 <div className="note-card-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {searchResults.map((note) => (
@@ -157,13 +165,13 @@ const HomePage = ({ onNavigate }) => {
                   ))}
                 </div>
               ) : (
-                <p className="text-center text-gray-400 text-lg">No notes found matching your query.</p>
+                <p className="text-center text-gray-600 text-lg">No notes found matching your query.</p>
               )}
             </div>
           ) : (
             <>
               <div className="mb-16 note-card-container">
-                <h2 className="text-4xl font-extrabold text-white mb-8 text-center">Top Rated Notes</h2>
+                <h2 className="text-4xl font-extrabold text-gray-900 mb-8 text-center">Top Rated Notes</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {topNotes.map((note) => (
                       <div key={note.id} className="home-note-card">
@@ -174,7 +182,7 @@ const HomePage = ({ onNavigate }) => {
               </div>
 
               <div className="note-card-container">
-                <h2 className="text-4xl font-extrabold text-white mb-8 text-center">Latest Notes</h2 >
+                <h2 className="text-4xl font-extrabold text-gray-900 mb-8 text-center">Latest Notes</h2 >
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {latestNotes.map((note) => (
                       <div key={note.id} className="home-note-card">
@@ -188,9 +196,10 @@ const HomePage = ({ onNavigate }) => {
         </div>
       </div>
 
-      <footer className="bg-gray-900 border-t border-gray-800 text-white py-10">
+      {/* Footer: Light gray background, light border */}
+      <footer className="bg-gray-100 border-t border-gray-300 text-gray-900 py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gray-400">&copy; {new Date().getFullYear()} MXShare. Collaborate. Share. Learn.</p>
+          <p className="text-gray-600">&copy; {new Date().getFullYear()} MXShare. Collaborate. Share. Learn.</p>
         </div>
       </footer>
     </div>

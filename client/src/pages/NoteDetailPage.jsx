@@ -130,16 +130,17 @@ const NoteDetailPage = () => {
     return null;
   };
 
-  if (loading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">Loading...</div>;
+  if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-900">Loading...</div>;
   if (!note) return null;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 pb-20">
+    // Main background is light gray/white, text is dark gray
+    <div className="min-h-screen bg-gray-50 text-gray-900 pb-20">
       
-      {/* Header */}
-      <div className="bg-gray-900 border-b border-gray-800 p-4">
+      {/* Header: White background, light gray border */}
+      <div className="bg-white border-b border-gray-200 p-4">
         <div className="max-w-7xl mx-auto">
-            <button onClick={() => navigate(-1)} className="flex items-center text-gray-400 hover:text-white transition-colors">
+            <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors">
                 <ArrowLeft className="w-5 h-5 mr-2" /> Back
             </button>
         </div>
@@ -150,24 +151,25 @@ const NoteDetailPage = () => {
         {/* LEFT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
             
-            {/* Info Card */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-                <h1 className="text-3xl font-bold text-white mb-2">{note.title}</h1>
-                <div className="flex flex-wrap gap-4 text-sm text-gray-400">
+            {/* Info Card: White background, light gray border */}
+            <div className="bg-white border border-gray-300 rounded-xl p-6 shadow-lg">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{note.title}</h1>
+                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
                     <span className="flex items-center"><User className="w-4 h-4 mr-1"/> {note.uploader?.name || 'Unknown'}</span>
                     <span className="flex items-center"><Calendar className="w-4 h-4 mr-1"/> {new Date(note.createdAt).toLocaleDateString()}</span>
                     <span className="flex items-center text-yellow-500"><Star className="w-4 h-4 mr-1 fill-yellow-500"/> {note.avgRating?.toFixed(1)} ({note.reviewCount})</span>
-                    <span className="flex items-center text-blue-400"><Download className="w-4 h-4 mr-1"/> {note.downloads} Downloads</span>
+                    <span className="flex items-center text-blue-600"><Download className="w-4 h-4 mr-1"/> {note.downloads} Downloads</span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                     {note.tags && note.tags.map(tag => (
-                        <span key={tag} className="px-3 py-1 bg-blue-900/30 text-blue-400 rounded-full text-xs border border-blue-800">#{tag}</span>
+                        // Tags: Light blue background, dark blue text, light blue border
+                        <span key={tag} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs border border-blue-300">#{tag}</span>
                     ))}
                 </div>
             </div>
 
-            {/* Embed Viewer */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden aspect-video relative">
+            {/* Embed Viewer: White background, light gray border */}
+            <div className="bg-white border border-gray-300 rounded-xl overflow-hidden aspect-video relative">
                 {getEmbedUrl() ? (
                     <iframe src={getEmbedUrl()} className="w-full h-full" allowFullScreen title="Content Preview" />
                 ) : (
@@ -180,8 +182,8 @@ const NoteDetailPage = () => {
 
             {/* --- SPLIT BUTTONS --- */}
             <div className="grid grid-cols-2 gap-4">
-                {/* Preview Button */}
-                <Button onClick={handlePreview} variant="outline" className="py-6 text-lg border-gray-600 hover:bg-gray-800">
+                {/* Preview Button (Outline): Dark text, light gray border/hover */}
+                <Button onClick={handlePreview} variant="outline" className="py-6 text-lg border-gray-400 text-gray-900 hover:bg-gray-100">
                     <Eye className="w-6 h-6 mr-2" /> Preview
                 </Button>
 
@@ -194,25 +196,27 @@ const NoteDetailPage = () => {
 
         {/* RIGHT COLUMN: REVIEWS */}
         <div className="space-y-6">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center"><MessageSquare className="w-5 h-5 mr-2"/> Write a Review</h3>
+            {/* Write a Review Card: White background, light gray border */}
+            <div className="bg-white border border-gray-300 rounded-xl p-6 shadow-lg">
+                <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center"><MessageSquare className="w-5 h-5 mr-2"/> Write a Review</h3>
                 <form onSubmit={handleReviewSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">Rating</label>
+                        <label className="block text-sm text-gray-600 mb-2">Rating</label>
                         <div className="flex gap-2">
                             {[1, 2, 3, 4, 5].map((star) => (
                                 <Star 
                                     key={star} 
-                                    className={`w-8 h-8 cursor-pointer transition-colors ${star <= userRating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-600'}`}
+                                    className={`w-8 h-8 cursor-pointer transition-colors ${star <= userRating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400'}`}
                                     onClick={() => setUserRating(star)}
                                 />
                             ))}
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">Comment</label>
+                        <label className="block text-sm text-gray-600 mb-2">Comment</label>
                         <textarea 
-                            className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            // Textarea: Light gray background, light gray border, dark text
+                            className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
                             rows="3"
                             placeholder="Was this helpful?"
                             value={userComment}
@@ -225,22 +229,23 @@ const NoteDetailPage = () => {
                 </form>
             </div>
 
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 max-h-[600px] overflow-y-auto">
-                <h3 className="text-lg font-bold text-white mb-4">Community Reviews ({reviews.length})</h3>
+            {/* Community Reviews Card: White background, light gray border */}
+            <div className="bg-white border border-gray-300 rounded-xl p-6 max-h-[600px] overflow-y-auto shadow-lg">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Community Reviews ({reviews.length})</h3>
                 {reviews.length === 0 ? (
                     <p className="text-gray-500 text-center py-4">No reviews yet.</p>
                 ) : (
                     <div className="space-y-4">
                         {reviews.map(review => (
-                            <div key={review._id} className="border-b border-gray-800 pb-4 last:border-0">
+                            <div key={review._id} className="border-b border-gray-200 pb-4 last:border-0">
                                 <div className="flex justify-between items-start mb-1">
-                                    <span className="font-semibold text-gray-200">{review.user?.name || 'Anonymous'}</span>
+                                    <span className="font-semibold text-gray-900">{review.user?.name || 'Anonymous'}</span>
                                     <span className="text-xs text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</span>
                                 </div>
                                 <div className="flex text-yellow-500 text-xs mb-2">
                                     {[...Array(review.rating)].map((_, i) => <Star key={i} className="w-3 h-3 fill-yellow-500"/>)}
                                 </div>
-                                <p className="text-sm text-gray-300">{review.comment}</p>
+                                <p className="text-sm text-gray-700">{review.comment}</p>
                             </div>
                         ))}
                     </div>
