@@ -1,179 +1,446 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
     Aperture, LogOut, User, Lock, Upload, BookOpen, 
-    Award, Hash, Calendar, Zap, FileText, Menu, 
-    ExternalLink, Eye, Loader2, Edit2, Save, X, Heart, Target,
-    Search, Filter, ArrowRight 
+    Award, LayoutDashboard, Clock, UploadCloud, 
+    TrendingUp, Eye, ThumbsUp, Search, Loader2,
+    ExternalLink, FileText, ArrowRight, Check, X,
+    Heart, Target, Zap, Calendar, Hash, Edit2,
+    Github, Linkedin, Globe, GraduationCap, MapPin, 
+    Briefcase, Cpu, Key, EyeOff, Flame, Trophy, Medal, Star,
+    BarChart3
 } from 'lucide-react';
 
-import { Button, Input, Card, CardHeader, CardTitle, CardContent, Select } from '../components/ui/primitives';
+// --- IMPORTS ---
+import ThemeToggle from '../components/ThemeToggle';
+import { Button, Input, Select, Card, CardContent } from '../components/ui/primitives';
 import { API_BASE_URL, syllabusData } from '../data/constants';
+// Let Vite resolve the extension automatically
+// ✅ CORRECT
 import { AuthContext } from '../context/AuthContext';
+import { ToastContext } from '../context/ToastContext';
 import FileUploadCard from '../components/FileUploadCard';
 import TopContributors from '../components/TopContributors';
+import NoteCard from '../components/NoteCard';
 
-const LucideIcons = { Aperture, User, Lock, Upload, BookOpen, Award, LogOut };
+// Icon Mapping
+const LucideIcons = { 
+    Aperture, User, Lock, Upload, BookOpen, Award, LogOut, 
+    LayoutDashboard, Clock 
+};
 
-// ----------------------------------------------------------------------
-// 1. CONTRIBUTIONS COMPONENT
-// ----------------------------------------------------------------------
-const DashboardContributions = ({ user, onNoteView }) => {
-    const [myNotes, setMyNotes] = useState([]);
-    const [loading, setLoading] = useState(true);
+// ==================================================================================
+// 1. VISUAL & GAMIFICATION SUB-COMPONENTS
+// ==================================================================================
 
-    useEffect(() => {
-        const fetchMyNotes = async () => {
-            try {
-                const res = await axios.get(`${API_BASE_URL}/api/notes`);
-                if (res.data && user) {
-                    const userNotes = res.data.filter(note => 
-                        note.uploader && note.uploader._id === user._id
-                    );
-                    setMyNotes(userNotes);
-                }
-            } catch (error) {
-                console.error("Failed to fetch contributions:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        if (user) fetchMyNotes();
-    }, [user]);
-
-    if (loading) return <div className="text-gray-500 flex items-center p-6"><Loader2 className="animate-spin mr-2"/> Loading...</div>;
+// --- NEW: MODERN BAR CHART (Visually Pleasing Replacement) ---
+const ImpactAnalytics = ({ notes = [] }) => {
+    const totalViews = notes.reduce((acc, n) => acc + (n.downloads || 0), 0);
+    
+    // Mock Distribution Data (In a real app, this comes from backend history)
+    const data = [
+        { label: 'Mon', val: 12 },
+        { label: 'Tue', val: 24 },
+        { label: 'Wed', val: 18 },
+        { label: 'Thu', val: 45 },
+        { label: 'Fri', val: 30 },
+        { label: 'Sat', val: 55 },
+        { label: 'Sun', val: totalViews > 60 ? 60 : totalViews } 
+    ];
+    const max = Math.max(...data.map(d => d.val), 60);
 
     return (
-        <div className="space-y-6">
-            <h2 className="text-3xl font-bold text-gray-900">My Contributions ({myNotes.length})</h2>
-            <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-2">
-                {myNotes.length > 0 ? myNotes.map((note) => (
-                    <div key={note._id} className="flex items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:border-blue-400 transition-colors">
-                        <div className="flex items-center space-x-4 min-w-0 overflow-hidden">
-                            <div className="p-2 bg-blue-50 rounded-lg border border-blue-100">
-                                {note.videoUrl ? <ExternalLink className="w-5 h-5 text-red-500" /> : <FileText className="w-5 h-5 text-blue-600" />}
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm h-full flex flex-col">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-6">
+                <div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+                        <BarChart3 className="w-5 h-5 mr-2 text-blue-500" /> Weekly Activity
+                    </h3>
+                    <div className="flex items-baseline gap-2 mt-1">
+                        <span className="text-3xl font-black text-gray-900 dark:text-white">{totalViews}</span>
+                        <span className="text-sm text-gray-500 font-medium">total views</span>
+                    </div>
+                </div>
+                 <div className="flex items-center text-green-500 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-lg text-xs font-bold">
+                    <ArrowRight className="w-3 h-3 mr-1 -rotate-45" /> +24%
+                </div>
+            </div>
+
+            {/* Bar Chart Container */}
+            <div className="flex-grow flex items-end justify-between gap-2 md:gap-4 mt-2 h-40">
+                {data.map((item, i) => {
+                    const heightPercentage = (item.val / max) * 100;
+                    return (
+                        <div key={i} className="flex flex-col items-center flex-1 group relative h-full justify-end">
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-xs py-1 px-2 rounded pointer-events-none whitespace-nowrap z-10 shadow-lg">
+                                {item.val} Views
                             </div>
-                            <div className="min-w-0">
-                                <p className="text-base font-semibold text-gray-900 truncate">{note.title}</p>
-                                <div className="flex items-center text-xs text-gray-500 space-x-3">
-                                    <span>{note.subject}</span>
-                                    <span>•</span>
-                                    <span>{new Date(note.createdAt).toLocaleDateString()}</span>
-                                    <span>•</span>
-                                    <span className="flex items-center text-blue-600"><Eye className="w-3 h-3 mr-1" /> {note.downloads}</span>
-                                </div>
+                            
+                            {/* Bar Track */}
+                            <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-lg relative overflow-hidden h-full flex items-end">
+                                {/* The Bar */}
+                                <div 
+                                    className="w-full bg-blue-500 dark:bg-blue-600 rounded-lg transition-all duration-700 ease-out group-hover:bg-blue-400 dark:group-hover:bg-blue-500 hover:shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                                    style={{ height: `${heightPercentage}%` }}
+                                ></div>
                             </div>
+                            
+                            {/* Label */}
+                            <span className="text-[10px] uppercase font-bold text-gray-400 mt-3">{item.label}</span>
                         </div>
-                        <Button size="sm" variant="outline" onClick={() => onNoteView(note)} className="flex-shrink-0 ml-4 bg-white text-gray-700 border-gray-300 hover:bg-gray-50">View</Button>
-                    </div>
-                )) : (
-                    <div className="text-center py-10 bg-gray-50 rounded-xl border border-gray-200 border-dashed">
-                        <p className="text-gray-500">You haven't uploaded anything yet.</p>
-                    </div>
-                )}
+                    )
+                })}
             </div>
         </div>
     );
 };
 
-// ----------------------------------------------------------------------
-// 2. PROFILE COMPONENT
-// ----------------------------------------------------------------------
-const DashboardProfile = ({ userData }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-    const { authToken, setUser } = useContext(AuthContext); 
-    const [formData, setFormData] = useState({});
-
-    useEffect(() => {
-        setFormData({
-            bio: userData.bio || "",
-            interests: userData.interests || "",
-            strengths: userData.strengths || ""
-        });
-    }, [userData]);
-
-    const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-
-    const handleSave = async () => {
-        setIsLoading(true);
-        try {
-            const res = await axios.put(`${API_BASE_URL}/api/auth/profile`, formData, {
-                headers: { Authorization: `Bearer ${authToken}` }
-            });
-            setUser(prev => ({ ...prev, ...res.data.user }));
-            setIsEditing(false);
-        } catch (err) {
-            alert("Failed to save profile changes.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const renderTags = (str, cls) => str ? str.split(',').map((t, i) => <span key={i} className={`px-3 py-1 rounded-full text-xs font-medium ${cls} mr-2 mb-2 border inline-block shadow-sm`}>{t.trim()}</span>) : <span className="text-gray-400 text-xs italic">Add some tags...</span>;
+// --- DAILY QUESTS CARD ---
+const DailyQuests = () => {
+    const quests = [
+        { label: "Upload 1 Note", xp: 50, done: true },
+        { label: "Read 3 Notes", xp: 30, done: false },
+        { label: "Share Profile", xp: 20, done: false },
+    ];
 
     return (
-        <div className="space-y-6 max-w-4xl">
-            <div className="flex justify-between items-center">
-                <h2 className="text-3xl font-bold text-gray-900">My Profile</h2>
-                {!isEditing && <Button onClick={() => setIsEditing(true)} variant="outline" size="sm" className="bg-white text-gray-700 border-gray-300 hover:bg-gray-50"><Edit2 className="w-4 h-4 mr-2" /> Edit</Button>}
+        <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg h-full flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-6">
+                <h3 className="font-bold text-lg flex items-center"><Target className="w-5 h-5 mr-2"/> Daily Quests</h3>
+                <span className="text-xs bg-white/20 px-2 py-1 rounded font-medium">Resets in 4h</span>
             </div>
-            
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-lg">
-                <div className="h-32 bg-gradient-to-r from-blue-600 to-indigo-600 relative">
-                    <div className="absolute -bottom-10 left-8 p-1 bg-white rounded-full shadow-md">
-                        <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center text-blue-600 text-4xl font-bold">{userData.name?.[0]}</div>
+            <div className="space-y-3">
+                {quests.map((q, i) => (
+                    <div key={i} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${q.done ? 'bg-white/20 border-transparent' : 'bg-transparent border-white/20 hover:bg-white/10'}`}>
+                        <div className="flex items-center">
+                            <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center ${q.done ? 'bg-green-400 border-green-400' : 'border-white/50'}`}>
+                                {q.done && <Check className="w-3 h-3 text-black" />}
+                            </div>
+                            <span className={`text-sm font-medium ${q.done ? 'line-through opacity-70' : ''}`}>{q.label}</span>
+                        </div>
+                        <span className="text-xs font-bold text-yellow-300">+{q.xp} XP</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// --- BADGES STRIP ---
+const BadgeStrip = () => {
+    const badges = [
+        { icon: Star, color: "text-yellow-400", label: "First Login", desc: "Joined the platform" },
+        { icon: Upload, color: "text-blue-400", label: "Contributor", desc: "Uploaded 1st note" },
+        { icon: Eye, color: "text-green-400", label: "Visionary", desc: "100+ Views" },
+        { icon: Medal, color: "text-purple-400", label: "Top Rated", desc: "5-Star Rating" },
+    ];
+    return (
+        <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+            {badges.map((b, i) => (
+                <div key={i} className="flex flex-col items-center min-w-[100px] p-4 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group">
+                    <div className={`p-3 rounded-full bg-gray-50 dark:bg-slate-800 mb-3 group-hover:scale-110 transition-transform shadow-inner`}>
+                        <b.icon className={`w-6 h-6 ${b.color}`} />
+                    </div>
+                    <span className="text-xs font-bold text-gray-800 dark:text-white text-center">{b.label}</span>
+                    <span className="text-[10px] text-gray-400 text-center mt-1">{b.desc}</span>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+// --- ENHANCED HEADER ---
+const GamifiedHeader = ({ user, notesCount }) => {
+    const level = Math.floor(notesCount / 5) + 1;
+    const currentXP = (notesCount % 5) * 20;
+    const nextLevelXP = 100;
+    const progress = (currentXP / nextLevelXP) * 100;
+    const streak = 3; 
+
+    return (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-gray-200 dark:border-slate-800 shadow-sm mb-8 relative overflow-hidden">
+             <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
+                
+                {/* Avatar & Level */}
+                <div className="relative">
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 p-1">
+                        <div className="w-full h-full rounded-full bg-white dark:bg-slate-900 flex items-center justify-center text-3xl font-bold text-gray-800 dark:text-white uppercase">
+                            {user.name?.[0]}
+                        </div>
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full border-2 border-white dark:border-slate-900 flex items-center shadow-sm">
+                        Lvl {level}
+                    </div>
+                </div>
+
+                {/* Text Info */}
+                <div className="text-center md:text-left flex-grow">
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Hello, {user.name?.split(' ')[0]}!</h1>
+                    <div className="flex items-center justify-center md:justify-start mt-2 space-x-4 text-sm">
+                        <div className="flex items-center text-orange-500 font-bold bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-lg border border-orange-100 dark:border-orange-900/30">
+                            <Flame className="w-4 h-4 mr-1 fill-orange-500" /> {streak} Day Streak
+                        </div>
+                        <div className="flex items-center text-gray-500 dark:text-slate-400">
+                           <Award className="w-4 h-4 mr-1 text-purple-500" />
+                           <span>Scholar Scribe</span>
+                        </div>
                     </div>
                 </div>
                 
-                <div className="pt-12 pb-8 px-8">
-                    <div className="mb-6">
-                        <h1 className="text-2xl font-bold text-gray-900">{userData.name}</h1>
-                        <p className="text-gray-500">{userData.email}</p>
-                        <div className="flex flex-wrap gap-3 mt-3 text-sm text-gray-600">
-                            <span className="flex items-center bg-gray-100 px-3 py-1 rounded-full"><Hash className="w-3 h-3 mr-2 text-blue-500"/> {userData.userId || 'ID'}</span>
-                            <span className="flex items-center bg-gray-100 px-3 py-1 rounded-full"><Zap className="w-3 h-3 mr-2 text-yellow-500"/> {userData.department || 'MCA'}</span>
-                            <span className="flex items-center bg-gray-100 px-3 py-1 rounded-full"><Calendar className="w-3 h-3 mr-2 text-green-500"/> Joined {userData.joinedDate}</span>
+                {/* XP Bar */}
+                <div className="w-full md:w-64 bg-gray-50 dark:bg-slate-800 rounded-xl p-4 border border-gray-100 dark:border-slate-700">
+                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider mb-2 text-gray-500 dark:text-slate-400">
+                        <span>Level Progress</span>
+                        <span>{currentXP} / {nextLevelXP} XP</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                            style={{ width: `${Math.max(progress, 5)}%` }}
+                        />
+                    </div>
+                    <p className="text-[10px] mt-2 text-right text-blue-600 dark:text-blue-400 font-medium">
+                        Upload <strong>{5 - (notesCount % 5)}</strong> more to level up
+                    </p>
+                </div>
+             </div>
+        </div>
+    );
+};
+
+// ==================================================================================
+// 2. VIEW COMPONENTS (Profile, Settings, History, etc.)
+// ==================================================================================
+
+const DashboardResetPassword = () => {
+    const { authToken } = useContext(AuthContext);
+    const { addToast } = useContext(ToastContext);
+    const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
+    const [loading, setLoading] = useState(false);
+    const [showPass, setShowPass] = useState({ current: false, new: false, confirm: false });
+
+    const toggleShow = (field) => setShowPass(prev => ({ ...prev, [field]: !prev[field] }));
+
+    const handleUpdate = async () => {
+        if (passwords.new !== passwords.confirm) return addToast("New passwords do not match", "error");
+        if (passwords.new.length < 6) return addToast("Password must be at least 6 characters", "error");
+        
+        setLoading(true);
+        try {
+            await axios.put(`${API_BASE_URL}/api/auth/updatepassword`, 
+                { currentPassword: passwords.current, newPassword: passwords.new },
+                { headers: { Authorization: `Bearer ${authToken}` } }
+            );
+            addToast("Password updated successfully!", "success");
+            setPasswords({ current: '', new: '', confirm: '' });
+        } catch (error) {
+            addToast(error.response?.data?.message || "Failed to update password", "error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const renderInput = (label, field, placeholder) => (
+        <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">{label}</label>
+            <div className="relative">
+                <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-400"/>
+                <input 
+                    type={showPass[field] ? "text" : "password"}
+                    className="w-full pl-10 pr-10 py-2 rounded-xl border bg-gray-50 dark:bg-slate-900 border-gray-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                    placeholder={placeholder}
+                    value={passwords[field]}
+                    onChange={e => setPasswords({...passwords, [field]: e.target.value})}
+                />
+                <button 
+                    onClick={() => toggleShow(field)}
+                    className="absolute right-3 top-3 text-gray-400 hover:text-blue-500"
+                >
+                    {showPass[field] ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+                </button>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="max-w-xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl text-red-500">
+                        <Key className="w-6 h-6"/>
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Security Settings</h2>
+                        <p className="text-sm text-gray-500">Update your password to keep your account safe.</p>
+                    </div>
+                </div>
+                {renderInput("Current Password", "current", "Enter current password")}
+                {renderInput("New Password", "new", "Enter new password")}
+                {renderInput("Confirm New Password", "confirm", "Confirm new password")}
+                <div className="mt-8 flex justify-end">
+                    <Button onClick={handleUpdate} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl shadow-lg shadow-blue-500/30">
+                        {loading ? <Loader2 className="animate-spin w-4 h-4 mr-2"/> : <Check className="w-4 h-4 mr-2"/>} Update Password
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const DashboardProfile = ({ userData, onUpdateUser }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const { authToken } = useContext(AuthContext);
+    const [formData, setFormData] = useState({
+        bio: userData.bio || "",
+        college: userData.college || "PSG College of Technology",
+        department: userData.department || "MCA",
+        semester: userData.semester || "1st Year",
+        location: userData.location || "Coimbatore, India",
+        skills: userData.skills || "C Programming, React, Data Structures",
+        github: userData.github || "",
+        linkedin: userData.linkedin || "",
+        website: userData.website || ""
+    });
+
+    useEffect(() => { setFormData(prev => ({ ...prev, ...userData })); }, [userData]);
+
+    const handleSave = async () => {
+        try {
+            await axios.put(`${API_BASE_URL}/api/auth/profile`, formData, { headers: { Authorization: `Bearer ${authToken}` } });
+            onUpdateUser({ ...userData, ...formData }); 
+            setIsEditing(false);
+        } catch (e) { alert("Error saving profile."); }
+    };
+
+    const renderSkillTags = (skillsString) => {
+        if (!skillsString) return <span className="text-sm text-gray-400 italic">No skills added yet.</span>;
+        return skillsString.split(',').map((skill, index) => (
+            <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 mr-2 mb-2 border border-blue-100 dark:border-blue-800 transition-transform hover:scale-105">
+                {skill.trim()}
+            </span>
+        ));
+    };
+
+    return (
+        <div className="animate-in slide-in-from-bottom-4 duration-700 max-w-5xl mx-auto pb-10">
+            <div className="flex justify-between items-center mb-6">
+                <div><h2 className="text-3xl font-bold text-gray-900 dark:text-white">My Profile</h2></div>
+                {!isEditing && (
+                    <Button 
+                        onClick={() => setIsEditing(true)} 
+                        className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-200 transition-all shadow-md"
+                    >
+                        <Edit2 className="w-4 h-4 mr-2"/> Edit Profile
+                    </Button>
+                )}
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Column */}
+                <div className="lg:col-span-1 space-y-6">
+                    {/* Avatar Card */}
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 overflow-visible shadow-sm relative mt-12">
+                        {/* Gradient Banner */}
+                        <div className="h-32 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-600 rounded-t-2xl"></div>
+                        
+                        {/* Avatar Positioning */}
+                        <div className="px-6 pb-6 pt-16 relative">
+                            <div className="absolute -top-16 left-6">
+                                <div className="w-32 h-32 rounded-full border-[6px] border-white dark:border-slate-900 bg-gray-200 dark:bg-slate-800 flex items-center justify-center text-5xl font-bold text-gray-600 dark:text-slate-300 uppercase shadow-lg">
+                                    {userData.name?.[0]}
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{userData.name}</h1>
+                                <p className="text-gray-500 dark:text-slate-400 text-sm font-medium">{userData.email}</p>
+                            </div>
                         </div>
                     </div>
 
-                    <hr className="border-gray-100 my-6" />
+                    {!isEditing && (
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-6 shadow-sm">
+                            <h3 className="text-xs font-bold uppercase tracking-wider mb-4 text-gray-400">Social Connect</h3>
+                            <div className="space-y-4">
+                                <a href={formData.github} target="_blank" rel="noreferrer" className="flex items-center text-gray-600 dark:text-slate-300 hover:text-blue-600 transition-colors cursor-pointer p-2 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-lg">
+                                    <Github className="w-5 h-5 mr-3"/> 
+                                    <span className="truncate">{formData.github || "Github not added"}</span>
+                                    {formData.github && <ExternalLink className="w-3 h-3 ml-auto opacity-50"/>}
+                                </a>
+                                <a href={formData.linkedin} target="_blank" rel="noreferrer" className="flex items-center text-gray-600 dark:text-slate-300 hover:text-blue-600 transition-colors cursor-pointer p-2 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-lg">
+                                    <Linkedin className="w-5 h-5 mr-3"/> 
+                                    <span className="truncate">{formData.linkedin || "LinkedIn not added"}</span>
+                                    {formData.linkedin && <ExternalLink className="w-3 h-3 ml-auto opacity-50"/>}
+                                </a>
+                                <div className="flex items-center text-gray-600 dark:text-slate-300 p-2">
+                                    <Globe className="w-5 h-5 mr-3"/> 
+                                    <span className="truncate">{formData.website || "Website not added"}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
+                {/* Right Column (Details) */}
+                <div className="lg:col-span-2 space-y-6">
                     {isEditing ? (
-                        <div className="space-y-6 animate-in fade-in duration-300">
-                            <div>
-                                <label className="text-sm font-medium text-gray-700 block mb-1">Bio</label>
-                                <textarea name="bio" value={formData.bio} onChange={handleChange} rows="3" className="w-full bg-white border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-6 shadow-sm space-y-5 animate-in fade-in zoom-in-95 duration-300">
+                             <div>
+                                <label className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-1">Bio</label>
+                                <textarea className="w-full p-3 border rounded-xl dark:bg-slate-950 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" rows="4" value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} placeholder="Tell us about yourself..." />
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700 block mb-1">Interests (comma separated)</label>
-                                    <input name="interests" value={formData.interests} onChange={handleChange} className="w-full bg-white border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                                </div>
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700 block mb-1">Strengths (comma separated)</label>
-                                    <input name="strengths" value={formData.strengths} onChange={handleChange} className="w-full bg-white border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                                </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label className="block text-sm font-bold mb-1">College</label><Input value={formData.college} onChange={e => setFormData({...formData, college: e.target.value})} className="bg-gray-50 dark:bg-slate-950 rounded-xl"/></div>
+                                <div><label className="block text-sm font-bold mb-1">Department</label><Input value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="bg-gray-50 dark:bg-slate-950 rounded-xl"/></div>
+                                <div><label className="block text-sm font-bold mb-1">Semester</label><Input value={formData.semester} onChange={e => setFormData({...formData, semester: e.target.value})} className="bg-gray-50 dark:bg-slate-950 rounded-xl"/></div>
+                                <div><label className="block text-sm font-bold mb-1">Location</label><Input value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="bg-gray-50 dark:bg-slate-950 rounded-xl"/></div>
                             </div>
-                            <div className="flex gap-3 pt-2">
-                                <Button onClick={handleSave} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white px-6">{isLoading?"Saving...":"Save Changes"}</Button>
-                                <Button variant="ghost" onClick={()=>setIsEditing(false)} className="text-gray-600 hover:bg-gray-100">Cancel</Button>
+                            <div><label className="block text-sm font-bold mb-1">Skills (comma separated)</label><Input value={formData.skills} onChange={e => setFormData({...formData, skills: e.target.value})} className="bg-gray-50 dark:bg-slate-950 rounded-xl"/></div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                                <div><label className="block text-sm font-bold mb-1">Github URL</label><Input value={formData.github} onChange={e => setFormData({...formData, github: e.target.value})} className="bg-gray-50 dark:bg-slate-950 rounded-xl"/></div>
+                                <div><label className="block text-sm font-bold mb-1">LinkedIn URL</label><Input value={formData.linkedin} onChange={e => setFormData({...formData, linkedin: e.target.value})} className="bg-gray-50 dark:bg-slate-950 rounded-xl"/></div>
+                            </div>
+                            <div className="flex justify-end gap-3 pt-6 border-t dark:border-slate-800">
+                                <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
+                                <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white px-8 rounded-xl">Save Changes</Button>
                             </div>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-2">
-                                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center"><User className="w-5 h-5 mr-2 text-blue-600"/> About Me</h3>
-                                <p className="text-gray-600 leading-relaxed bg-gray-50 p-5 rounded-xl border border-gray-100">
-                                    {userData.bio || "No bio added yet."}
+                        <>
+                            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-8 shadow-sm">
+                                <h3 className="text-lg font-bold mb-4 flex items-center text-gray-900 dark:text-white">
+                                    <User className="w-5 h-5 mr-2 text-blue-500"/> About Me
+                                </h3>
+                                <p className="text-gray-600 dark:text-slate-300 leading-relaxed text-sm md:text-base">
+                                    {formData.bio || "No bio added yet. Click edit to introduce yourself!"}
                                 </p>
                             </div>
-                            <div className="space-y-6">
-                                <div><h3 className="text-gray-900 font-semibold mb-3 flex items-center"><Heart className="w-5 h-5 mr-2 text-pink-500"/> Interests</h3>{renderTags(userData.interests, "bg-pink-50 text-pink-700 border-pink-200")}</div>
-                                <div><h3 className="text-gray-900 font-semibold mb-3 flex items-center"><Target className="w-5 h-5 mr-2 text-cyan-600"/> Strengths</h3>{renderTags(userData.strengths, "bg-cyan-50 text-cyan-700 border-cyan-200")}</div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-6 shadow-sm h-full">
+                                    <h3 className="text-lg font-bold mb-4 flex items-center"><GraduationCap className="w-5 h-5 mr-2 text-purple-500"/> Education</h3>
+                                    <div className="space-y-4">
+                                        <div><p className="text-xs text-gray-400 uppercase font-bold">College</p><p className="font-medium">{formData.college}</p></div>
+                                        <div className="flex gap-4">
+                                            <div><p className="text-xs text-gray-400 uppercase font-bold">Dept</p><p className="font-medium">{formData.department}</p></div>
+                                            <div><p className="text-xs text-gray-400 uppercase font-bold">Year</p><p className="font-medium">{formData.semester}</p></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-6 shadow-sm h-full">
+                                    <h3 className="text-lg font-bold mb-4 flex items-center"><MapPin className="w-5 h-5 mr-2 text-red-500"/> Location</h3>
+                                    <p className="font-medium text-lg text-gray-800 dark:text-gray-200">{formData.location}</p>
+                                </div>
                             </div>
-                        </div>
+
+                            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-6 shadow-sm">
+                                <h3 className="text-lg font-bold mb-4 flex items-center"><Cpu className="w-5 h-5 mr-2 text-green-500"/> Skills & Interests</h3>
+                                <div className="flex flex-wrap">{renderSkillTags(formData.skills)}</div>
+                            </div>
+                        </>
                     )}
                 </div>
             </div>
@@ -181,267 +448,436 @@ const DashboardProfile = ({ userData }) => {
     );
 };
 
-// ----------------------------------------------------------------------
-// 3. HISTORY COMPONENT
-// ----------------------------------------------------------------------
-const DashboardNotesUsed = ({ onNoteView }) => {
-    const [history, setHistory] = useState([]);
+const DashboardContributions = ({ user, onNoteView }) => {
+    const [notes, setNotes] = useState([]);
     const [loading, setLoading] = useState(true);
-    const { authToken } = useContext(AuthContext);
 
     useEffect(() => {
-        if (!authToken) return;
-        axios.get(`${API_BASE_URL}/api/notes/history`, { headers: { Authorization: `Bearer ${authToken}` } })
-             .then(res => setHistory(res.data))
-             .catch(console.error)
-             .finally(() => setLoading(false));
-    }, [authToken]);
+        const fetchNotes = async () => {
+            try {
+                const res = await axios.get(`${API_BASE_URL}/api/notes`);
+                setNotes(res.data.filter(n => n.uploader?._id === user._id));
+            } catch (e) { console.error(e); } 
+            finally { setLoading(false); }
+        };
+        fetchNotes();
+    }, [user]);
 
-    if (loading) return <div className="text-gray-500 p-6">Loading history...</div>;
+    if (loading) return <div className="p-8 text-center flex flex-col items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-2"/><span className="text-gray-400">Loading your work...</span></div>;
 
     return (
-        <div className="space-y-6">
-            <h2 className="text-3xl font-bold text-gray-900">History</h2>
-            <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-2">
-                 {history.length > 0 ? history.map((item) => (
-                    <div key={item._id} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 shadow-sm hover:border-green-400 transition-colors">
-                        <div className="flex items-center space-x-4 min-w-0">
-                            <div className="p-2 bg-green-50 rounded-lg border border-green-100"><BookOpen className="w-5 h-5 text-green-600" /></div>
-                            <div className="min-w-0">
-                                <p className="font-semibold text-gray-900 truncate">{item.note?.title || 'Deleted Note'}</p>
-                                <div className="flex items-center text-xs text-gray-500 space-x-2">
-                                    <span>By {item.note?.uploader?.name || 'Unknown'}</span>
-                                    <span>•</span>
-                                    <span>Accessed {new Date(item.lastAccessed).toLocaleDateString()}</span>
+        <div className="animate-in fade-in duration-500 max-w-4xl mx-auto">
+            <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white">My Contributions</h2>
+                    <p className="text-gray-500 dark:text-slate-400 mt-1">You have shared <span className="font-bold text-blue-600">{notes.length}</span> resources with the community.</p>
+                </div>
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl">
+                    <Upload className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                {notes.length === 0 ? (
+                    <div className="text-center py-20 bg-gray-50 dark:bg-slate-900 rounded-3xl border-2 border-dashed border-gray-200 dark:border-slate-800">
+                        <UploadCloud className="w-12 h-12 text-gray-300 mx-auto mb-4"/>
+                        <p className="text-gray-500 font-medium">No contributions yet.</p>
+                        <p className="text-sm text-gray-400">Upload your first note to earn badges!</p>
+                    </div>
+                ) : (
+                    notes.map((note, index) => (
+                        <div 
+                            key={note._id} 
+                            style={{ animationDelay: `${index * 100}ms` }}
+                            className="group flex flex-col md:flex-row md:items-center justify-between p-5 bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg transition-all duration-300 animate-in slide-in-from-bottom-4 fill-mode-forwards"
+                        >
+                            <div className="flex items-start md:items-center gap-5 mb-4 md:mb-0">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
+                                    <FileText className="w-6 h-6"/>
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">{note.title}</h3>
+                                    <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-slate-400 mt-1">
+                                        <span className="flex items-center"><Calendar className="w-3 h-3 mr-1"/> {new Date(note.createdAt).toLocaleDateString()}</span>
+                                        <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-slate-600"></span>
+                                        <span className="px-2 py-0.5 bg-gray-100 dark:bg-slate-800 rounded-full font-medium">{note.subject}</span>
+                                        {note.downloads > 0 && (
+                                            <>
+                                                <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-slate-600"></span>
+                                                <span className="flex items-center text-green-600"><Eye className="w-3 h-3 mr-1"/> {note.downloads}</span>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
+                            
+                            <Button 
+                                onClick={() => onNoteView(note)}
+                                className="bg-white dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-slate-700 hover:border-blue-600 transition-all rounded-xl px-6 py-2 shadow-sm font-medium flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600"
+                            >
+                                <Eye className="w-4 h-4 mr-2"/> View File
+                            </Button>
                         </div>
-                        <Button size="sm" variant="outline" onClick={() => item.note && onNoteView(item.note)} className="bg-white text-gray-700 border-gray-300 hover:bg-gray-50">View Again</Button>
-                    </div>
-                )) : <div className="text-center p-12 bg-gray-50 rounded-xl border border-gray-200 border-dashed text-gray-500">No history yet.</div>}
+                    ))
+                )}
             </div>
         </div>
     );
 };
-
-// ----------------------------------------------------------------------
-// 4. SETTINGS COMPONENT
-// ----------------------------------------------------------------------
-const DashboardResetPassword = () => {
-    return <div className="text-gray-500 text-center p-10 bg-gray-50 rounded-xl border border-gray-200">Feature Disabled in Demo Mode</div>;
-};
-
-// ----------------------------------------------------------------------
-// 5. MAIN DASHBOARD
-// ----------------------------------------------------------------------
-const UserDashboard = ({ user, onLogout, onNoteView, onDashboardViewChange, currentView, children }) => {
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const navigate = useNavigate();
-
+const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSubject, setSelectedSubject] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
+
+    useEffect(() => {
+        const fetchRecents = async () => {
+             try {
+                const res = await axios.get(`${API_BASE_URL}/api/notes`);
+                const sorted = res.data.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 4);
+                setSearchResults(sorted); 
+             } catch(e) { console.error(e); }
+        };
+        fetchRecents();
+    }, [triggerRefresh]);
 
     const handleSearch = async () => {
         setIsSearching(true);
         try {
             const res = await axios.get(`${API_BASE_URL}/api/notes`);
             let results = res.data;
-
             if (searchQuery) {
                 const q = searchQuery.toLowerCase();
-                // --- FIX: Added Safety Check for uploader.name ---
-                results = results.filter(n => 
-                    (n.title && n.title.toLowerCase().includes(q)) || 
-                    (n.uploader && n.uploader.name && n.uploader.name.toLowerCase().includes(q))
-                );
+                results = results.filter(n => (n.title?.toLowerCase().includes(q) || n.uploader?.name?.toLowerCase().includes(q)));
             }
-            if (selectedSubject) {
-                results = results.filter(n => n.subject === selectedSubject);
-            }
+            if (selectedSubject) results = results.filter(n => n.subject === selectedSubject);
             setSearchResults(results);
-        } catch (err) {
-            console.error("Search error", err);
-        } finally {
-            setIsSearching(false);
-        }
+        } catch (err) { console.error(err); } 
+        finally { setIsSearching(false); }
     };
 
-    const handleNoteView = (note) => navigate(`/note/${note._id}`);
+    return (
+        <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center">
+                    <Search className="w-5 h-5 mr-3 text-blue-600 dark:text-blue-400"/> Find Learning Materials
+                </h2>
+                <div className="flex flex-col md:flex-row gap-4">
+                    <Input 
+                        placeholder="Search notes..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="flex-grow bg-gray-50 dark:bg-slate-950"
+                    />
+                    <Select 
+                        value={selectedSubject} 
+                        onChange={(e) => setSelectedSubject(e.target.value)}
+                        className="w-full md:w-64 bg-gray-50 dark:bg-slate-950"
+                    >
+                        <option value="">All Subjects</option>
+                        {syllabusData.subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                    </Select>
+                    <Button onClick={handleSearch} disabled={isSearching} className="bg-blue-600 hover:bg-blue-700 text-white">
+                        {isSearching ? <Loader2 className="animate-spin"/> : "Search"}
+                    </Button>
+                </div>
+            </div>
 
-    const userData = {
-        name: user ? user.name : 'Loading...',
-        email: user ? user.email : '...',
-        userId: user ? (user.googleId || user._id) : '...',
-        joinedDate: user ? new Date(user.createdAt).toLocaleDateString() : '...',
-        bio: user?.bio, interests: user?.interests, strengths: user?.strengths
+            <div className="space-y-4">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center">
+                    {searchQuery ? 'Search Results' : 'Recommended For You'}
+                    <span className="ml-3 text-xs bg-gray-200 dark:bg-slate-800 px-2 py-0.5 rounded-full">{searchResults.length}</span>
+                </h3>
+                {searchResults.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {searchResults.map(note => (
+                             <div key={note._id} className="hover:-translate-y-1 transition-transform">
+                                <NoteCard note={note} onNavigate={() => onNoteView(note)} />
+                             </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-center py-20 bg-gray-50 dark:bg-slate-900/50 rounded-xl border-dashed border-2 border-gray-200 dark:border-slate-800">
+                        <p className="text-gray-500">No results found.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const DashboardNotesUsed = ({ onNoteView }) => {
+    const [history, setHistory] = useState([]);
+    const { authToken } = useContext(AuthContext);
+
+    useEffect(() => {
+        if (authToken) {
+            axios.get(`${API_BASE_URL}/api/notes/history`, { headers: { Authorization: `Bearer ${authToken}` } })
+                .then(res => setHistory(res.data))
+                .catch(console.error);
+        }
+    }, [authToken]);
+
+    return (
+        <div className="animate-in fade-in duration-500 max-w-4xl mx-auto">
+            <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Reading History</h2>
+                    <p className="text-gray-500 dark:text-slate-400 mt-1">Notes you have viewed recently.</p>
+                </div>
+                <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-2xl">
+                    <Clock className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                {history.length === 0 ? (
+                    <div className="text-center py-20 bg-gray-50 dark:bg-slate-900 rounded-3xl border-2 border-dashed border-gray-200 dark:border-slate-800">
+                        <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4"/>
+                        <p className="text-gray-500 font-medium">No history yet.</p>
+                        <p className="text-sm text-gray-400">Start exploring notes to build your history!</p>
+                    </div>
+                ) : (
+                    history.map((item, index) => (
+                        <div 
+                            key={item._id} 
+                            style={{ animationDelay: `${index * 100}ms` }}
+                            className="group flex flex-col md:flex-row md:items-center justify-between p-5 bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-lg transition-all duration-300 animate-in slide-in-from-bottom-4 fill-mode-forwards"
+                        >
+                            <div className="flex items-start md:items-center gap-5 mb-4 md:mb-0">
+                                <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                                    <BookOpen className="w-6 h-6"/>
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg text-gray-900 dark:text-white group-hover:text-purple-600 transition-colors">
+                                        {item.note?.title || "Deleted Note"}
+                                    </h3>
+                                    <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-slate-400 mt-1">
+                                        <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> Accessed {new Date(item.lastAccessed).toLocaleDateString()}</span>
+                                        {item.note?.subject && (
+                                            <>
+                                                <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-slate-600"></span>
+                                                <span className="px-2 py-0.5 bg-gray-100 dark:bg-slate-800 rounded-full">{item.note.subject}</span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {item.note && (
+                                <Button 
+                                    onClick={() => onNoteView(item.note)}
+                                    className="bg-purple-50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-300 hover:bg-purple-600 hover:text-white border border-purple-100 dark:border-purple-800 hover:border-purple-600 transition-all rounded-xl px-5 py-2 shadow-sm font-medium flex items-center justify-center"
+                                >
+                                    <ArrowRight className="w-4 h-4 mr-2"/> Open Again
+                                </Button>
+                            )}
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+// ==================================================================================
+// MAIN DASHBOARD PAGE (EXPORT)
+// ==================================================================================
+
+const DashboardPage = () => {
+    const [currentView, setCurrentView] = useState('main');
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [userNotes, setUserNotes] = useState([]);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    const authContext = useContext(AuthContext);
+    const { user, logout, setUser } = useContext(AuthContext);
+    const { addToast } = useContext(ToastContext);
+    const navigate = useNavigate();
+    const uploaderRef = useRef(null);
+
+    // Fetch User Stats
+    useEffect(() => {
+        if (user) {
+            axios.get(`${API_BASE_URL}/api/notes`)
+                .then(res => setUserNotes(res.data.filter(n => n.uploader?._id === user._id)))
+                .catch(console.error);
+        }
+    }, [user, refreshTrigger]);
+
+    const handleLogout = () => {
+    // Safety Check: Does the logout function exist?
+    if (typeof logout === 'function') {
+        // The context handles the cleanup (see Step 1 above)
+        logout();
+        addToast('Logged out successfully', 'success');
+    } else {
+        // Fallback if Context is broken: Manually clear EVERYTHING
+        console.warn("Logout function not found. Manually scrubbing storage.");
+        
+        // List of all keys to remove
+        const keysToRemove = [
+            'userToken', 
+            'authToken', 
+            'refreshToken', 
+            'userData', 
+            'googleAccessToken', 
+            'googleRefreshToken'
+        ];
+
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+
+        window.location.href = '/login'; // Force reload to clear state
+        return;
+    }
+
+    navigate('/login');
+};
+
+    const handleNoteView = (note) => navigate(`/note/${note._id}`);
+    const handleUploadClick = () => {
+        setCurrentView('main');
+        setTimeout(() => uploaderRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     };
 
     const menuItems = [
-        { name: 'Main Dashboard', icon: 'Aperture', view: 'main' },
+        { name: 'Dashboard', icon: 'LayoutDashboard', view: 'main' },
         { name: 'Profile', icon: 'User', view: 'profile' },
-        { name: 'Contributions', icon: 'Upload', view: 'contributions' },
+        { name: 'My Contributions', icon: 'Upload', view: 'contributions' },
         { name: 'Leaderboard', icon: 'Award', view: 'topContributors' },
         { name: 'History', icon: 'BookOpen', view: 'notesUsed' },
         { name: 'Settings', icon: 'Lock', view: 'resetPassword' },
     ];
 
     const renderContent = () => {
-        if (children) return children; 
-        
         switch (currentView) {
-            case 'profile': return <DashboardProfile userData={userData} />;
-            case 'resetPassword': return <DashboardResetPassword />; 
+            case 'profile': return <DashboardProfile userData={user} onUpdateUser={setUser} />;
             case 'contributions': return <DashboardContributions user={user} onNoteView={handleNoteView} />;
             case 'notesUsed': return <DashboardNotesUsed onNoteView={handleNoteView} />;
             case 'topContributors': return <TopContributors />;
+            case 'resetPassword': return <DashboardResetPassword />;
             case 'main':
             default:
                 return (
-                    <div className="space-y-8">
-                        {/* SEARCH BAR */}
-                        <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                                <Search className="w-6 h-6 mr-3 text-blue-600"/> Find Learning Materials
-                            </h2>
-                            <div className="flex flex-col md:flex-row gap-4">
-                                <div className="flex-grow">
-                                    <Input 
-                                        placeholder="Search by title, topic, or contributor..." 
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="h-12 bg-gray-50 border-gray-200 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded-xl placeholder-gray-400"
-                                    />
-                                </div>
-                                <div className="w-full md:w-64">
-                                    <Select 
-                                        value={selectedSubject} 
-                                        onChange={(e) => setSelectedSubject(e.target.value)}
-                                        className="h-12 bg-gray-50 border-gray-200 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded-xl"
-                                    >
-                                        <option value="">All Subjects</option>
-                                        {syllabusData.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </Select>
-                                </div>
-                                <Button 
-                                    onClick={handleSearch} 
-                                    className="h-12 px-8 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md shadow-blue-600/20 rounded-xl transition-all"
-                                    disabled={isSearching}
-                                >
-                                    {isSearching ? <Loader2 className="animate-spin"/> : "Search"}
-                                </Button>
+                    <div className="space-y-8 animate-in fade-in pb-20">
+                        {/* 1. Header with Gamification */}
+                        <GamifiedHeader user={user} notesCount={userNotes.length} />
+
+                        {/* 2. Top Stats Grid (Graph + Quests) */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-auto">
+                            {/* Left: Bar Graph (Updated) */}
+                            <div className="lg:col-span-8 h-full">
+                                <ImpactAnalytics notes={userNotes} />
+                            </div>
+                            {/* Right: Daily Quests */}
+                            <div className="lg:col-span-4 h-full">
+                                <DailyQuests />
                             </div>
                         </div>
 
-                        {/* GRID */}
-                        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                            <div className="lg:col-span-2">
-                               <FileUploadCard onFileUploadSuccess={() => handleSearch()} /> 
+                        {/* 3. Middle Grid (Quick Actions + Badges) */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            <div className="lg:col-span-8">
+                                <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 mb-3">Achievements</h3>
+                                <BadgeStrip />
                             </div>
+                            <div className="lg:col-span-4">
+                                <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 mb-3">Quick Actions</h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button onClick={handleUploadClick} className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-xl font-bold text-sm hover:scale-105 transition-transform flex items-center justify-center border border-blue-100 dark:border-blue-800">
+                                        <UploadCloud className="w-4 h-4 mr-2"/> Upload
+                                    </button>
+                                    <button onClick={() => setCurrentView('profile')} className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 rounded-xl font-bold text-sm hover:scale-105 transition-transform flex items-center justify-center border border-purple-100 dark:border-purple-800">
+                                        <User className="w-4 h-4 mr-2"/> Profile
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
 
-                            <div className="lg:col-span-3">
-                                {searchResults.length > 0 ? (
-                                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                        <h3 className="text-lg font-semibold text-gray-700 flex items-center justify-between px-1">
-                                            <span>Found {searchResults.length} Results</span>
-                                            <span className="text-xs font-normal text-gray-500 bg-gray-200 px-2 py-1 rounded-full">Recent</span>
-                                        </h3>
-                                        {searchResults.map(note => (
-                                            <Card key={note._id} className="bg-white border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group" onClick={() => handleNoteView(note)}>
-                                                <CardContent className="p-5 flex items-center justify-between">
-                                                    <div className="flex items-center space-x-4 overflow-hidden">
-                                                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 group-hover:bg-blue-50 transition-colors">
-                                                            {note.videoUrl ? <ExternalLink className="w-6 h-6 text-red-500"/> : <FileText className="w-6 h-6 text-blue-600"/>}
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <h4 className="font-bold text-gray-900 truncate text-lg group-hover:text-blue-600 transition-colors">{note.title}</h4>
-                                                            <p className="text-xs text-gray-500 mt-1 flex items-center">
-                                                                <span className="font-medium text-gray-700">{note.subject}</span>
-                                                                <span className="mx-2">•</span>
-                                                                <User className="w-3 h-3 mr-1"/> {note.uploader?.name}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="text-gray-400 text-sm flex items-center bg-gray-50 px-3 py-1 rounded-full">
-                                                            <Eye className="w-4 h-4 mr-1.5"/> {note.downloads}
-                                                        </div>
-                                                        <button 
-                                                            onClick={(e) => { 
-                                                                e.stopPropagation(); 
-                                                                handleNoteView(note); 
-                                                            }}
-                                                            className="p-1 rounded-full hover:bg-blue-50 transition-colors"
-                                                        >
-                                                            <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 transition-colors" />
-                                                        </button>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <Card className="h-full min-h-[300px] flex items-center justify-center border-dashed bg-white border-gray-200 shadow-none rounded-2xl">
-                                        <div className="text-center p-8 text-gray-400">
-                                            <div className="bg-white p-4 rounded-full inline-block shadow-sm mb-4 border border-gray-100">
-                                                <Search className="w-8 h-8 text-gray-300"/>
-                                            </div>
-                                            <p className="font-medium text-gray-600 text-lg">No results found</p>
-                                            <p className="text-sm mt-1 text-gray-500">Try searching for a topic or subject.</p>
-                                        </div>
-                                    </Card>
-                                )}
-                            </div>
+                        {/* 4. Upload & Search */}
+                         <div ref={uploaderRef} className="scroll-mt-24 pt-4">
+                            <FileUploadCard onFileUploadSuccess={() => setRefreshTrigger(p => p+1)} />
+                         </div>
+                        <div className="border-t border-gray-200 dark:border-slate-800 pt-8">
+                             <DashboardSearchSection onNoteView={handleNoteView} triggerRefresh={refreshTrigger} />
                         </div>
                     </div>
                 );
         }
     };
 
+    if (!user) return <div className="min-h-screen flex items-center justify-center dark:bg-slate-950 dark:text-white">Loading...</div>;
+
     return (
-        <div className="min-h-screen bg-gray-50 text-gray-900 transition-colors duration-300 font-sans">
-            <header className="bg-white shadow-sm p-4 sticky top-0 z-30 border-b border-gray-200 backdrop-blur-md bg-white/80">
+        <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white transition-colors duration-300 font-sans">
+            <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-gray-200 dark:border-slate-800 p-4">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div className="relative">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold cursor-pointer shadow-md hover:shadow-lg transform hover:scale-105 transition-all" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-                            {userData.name[0]}
+                    <div className="flex items-center gap-4">
+                        <div className="relative">
+                            <button 
+                                className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center hover:ring-4 hover:ring-blue-100 dark:hover:ring-blue-900 transition-all" 
+                                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                            >
+                                {user.name?.[0]}
+                            </button>
+                            
+                            {isMenuOpen && (
+                                <>
+                                <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>
+                                <div className="absolute top-12 left-0 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-800 z-50 overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                                    <div className="p-4 border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/50">
+                                        <p className="font-bold truncate">{user.name}</p>
+                                        <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{user.email}</p>
+                                    </div>
+                                    <div className="py-2">
+                                        {menuItems.map((item) => {
+                                            const Icon = LucideIcons[item.icon] || LucideIcons['LayoutDashboard'];
+                                            return (
+                                                <button 
+                                                    key={item.view} 
+                                                    onClick={() => { setCurrentView(item.view); setIsMenuOpen(false); }} 
+                                                    className={`w-full text-left flex items-center px-4 py-3 text-sm font-medium transition-colors ${currentView === item.view ? 'bg-blue-50 dark:bg-slate-800 text-blue-600' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800'}`}
+                                                >
+                                                    <Icon className="w-4 h-4 mr-3" /> {item.name}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                    <div className="border-t border-gray-100 dark:border-slate-800 p-2">
+                                        <button onClick={handleLogout} className="w-full text-left flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition-colors">
+                                            <LogOut className="w-4 h-4 mr-3" /> Logout
+                                        </button>
+                                    </div>
+                                </div>
+                                </>
+                            )}
                         </div>
-                        {isMenuOpen && (
-                            <div className="absolute top-14 left-0 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-in slide-in-from-top-2 fade-in duration-200">
-                                <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-                                    <p className="text-sm font-bold text-gray-900 truncate">{userData.name}</p>
-                                    <p className="text-xs text-gray-500 truncate">{userData.email}</p>
-                                </div>
-                                <div className="py-2">
-                                    {menuItems.map((item) => {
-                                        const Icon = LucideIcons[item.icon];
-                                        return (
-                                            <button key={item.name} onClick={() => { onDashboardViewChange(item.view); setIsMenuOpen(false); }} className="w-full text-left flex items-center px-4 py-3 text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium">
-                                                <Icon className="w-4 h-4 mr-3" /> {item.name}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                <div className="border-t border-gray-100 p-2">
-                                    <button onClick={onLogout} className="w-full text-left flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors">
-                                        <LogOut className="w-4 h-4 mr-3" /> Logout
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                        <div className="hidden sm:flex items-center gap-2">
+                            <span className="font-bold text-lg">MXShare</span>
+                            <span className="text-gray-300 dark:text-slate-700">/</span>
+                            <span className="text-blue-600 font-medium">
+                                {currentView === 'main' ? 'Dashboard' : menuItems.find(i => i.view === currentView)?.name}
+                            </span>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Aperture className="w-6 h-6 text-blue-600" />
-                        <h1 className="text-xl font-extrabold text-gray-900 tracking-tight hidden sm:block">MXShare <span className="text-blue-600">Hub</span></h1>
+                    
+                    <div className="flex items-center gap-3">
+                        <ThemeToggle />
+                        {currentView !== 'main' && (
+                            <Button variant="ghost" size="sm" onClick={() => setCurrentView('main')} className="hidden md:flex">
+                                <LayoutDashboard className="w-5 h-5 mr-2" /> Dashboard
+                            </Button>
+                        )}
                     </div>
                 </div>
             </header>
-            <main className="max-w-7xl mx-auto p-6 lg:p-8">
+
+            <main className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
                 {renderContent()}
             </main>
         </div>
     );
 };
 
-export default UserDashboard;
+export default DashboardPage;

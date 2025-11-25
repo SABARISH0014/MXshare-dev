@@ -2,7 +2,7 @@ import React, { useState, useContext } from 'react';
 import { Trash2, FileText, Calendar, User, Eye, Download, LogOut, Lock, Users, FileCheck, ArrowDownCircle } from 'lucide-react';
 import { Button } from '../components/ui/primitives';
 import { ToastContext } from '../context/ToastContext';
-
+import ThemeToggle from '../components/ThemeToggle';
 // Static Data (Perfect for now — change to API later)
 const STATS = {
   totalUsers: 842,

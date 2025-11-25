@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
     Download, User, Calendar, Star, MessageSquare, 
-    ArrowLeft, FileText, Eye, Share2, ExternalLink 
+    ArrowLeft, FileText, Eye, Lock, Loader2
 } from 'lucide-react';
 import axios from 'axios';
-
+import ThemeToggle from '../components/ThemeToggle';
 import { Button } from '../components/ui/primitives'; 
 import { AuthContext } from '../context/AuthContext';
 import { ToastContext } from '../context/ToastContext';
@@ -14,11 +14,14 @@ import { API_BASE_URL } from '../data/constants';
 const NoteDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation(); 
+
   const { user, authToken } = useContext(AuthContext);
   const { addToast } = useContext(ToastContext);
 
   const [note, setNote] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   // Review State
   const [reviews, setReviews] = useState([]);
@@ -28,26 +31,46 @@ const NoteDetailPage = () => {
 
   // --- 1. FETCH DATA ---
   useEffect(() => {
+    window.scrollTo(0, 0);
+
     const fetchData = async () => {
       try {
+        setLoading(true);
         const noteRes = await axios.get(`${API_BASE_URL}/api/notes/${id}`);
         setNote(noteRes.data);
-        const reviewRes = await axios.get(`${API_BASE_URL}/api/notes/${id}/reviews`);
-        setReviews(reviewRes.data);
+        
+        try {
+            const reviewRes = await axios.get(`${API_BASE_URL}/api/notes/${id}/reviews`);
+            setReviews(reviewRes.data);
+        } catch (reviewErr) {
+            console.warn("Could not load reviews", reviewErr);
+        }
+
       } catch (err) {
         console.error(err);
-        addToast("Failed to load note.", "error");
-        navigate('/dashboard');
+        setError(err.response?.data?.message || "Failed to load note details.");
+        addToast("Error loading note.", "error");
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
-  }, [id, navigate, addToast]);
 
-  // --- 2. LOGIC: PREVIEW (View Only) ---
+    if (id) {
+        fetchData();
+    } else {
+        setError("Invalid Note ID");
+        setLoading(false);
+    }
+  }, [id, addToast]); 
+
+  // --- 2. LOGIC: PREVIEW ---
   const handlePreview = () => {
-    // Just open the link. Do not count as a download.
+    if (!user) {
+        addToast("Please login to preview this document.", "info");
+        navigate('/login', { state: { from: `/note/${id}` } });
+        return;
+    }
+
     const targetUrl = note.videoUrl || note.websiteUrl;
     
     if (targetUrl) {
@@ -57,41 +80,49 @@ const NoteDetailPage = () => {
     }
   };
 
-  // --- 3. LOGIC: DOWNLOAD (Track + Force Save) ---
+  // --- 3. LOGIC: DOWNLOAD ---
   const handleDownload = async () => {
+    if (!user) {
+        addToast("Please login to download.", "info");
+        navigate('/login', { state: { from: `/note/${id}` } });
+        return;
+    }
+
     try {
-      // A. Track in Database (Increment Count + Save History)
-      await axios.post(
-        `${API_BASE_URL}/api/notes/${id}/download`, 
-        {}, 
-        { headers: { Authorization: `Bearer ${authToken}` } }
-      );
+      if (authToken) {
+          await axios.post(
+            `${API_BASE_URL}/api/notes/${id}/download`, 
+            {}, 
+            { headers: { Authorization: `Bearer ${authToken}` } }
+          );
+      }
       
-      // B. Update UI
-      setNote(prev => ({ ...prev, downloads: prev.downloads + 1 }));
+      setNote(prev => ({ ...prev, downloads: (prev.downloads || 0) + 1 }));
       addToast("Starting download...", "success");
       
-      // C. Generate Direct Link
       if (note.videoUrl) {
-        // Videos usually can't be forced downloaded easily, so we open them
         window.open(note.videoUrl, '_blank');
       } 
       else if (note.googleDriveFileId) {
-        // MAGIC LINK: Converts a View link into a Direct Download link
         const directDownloadUrl = `https://drive.google.com/uc?export=download&id=${note.googleDriveFileId}`;
         window.open(directDownloadUrl, '_blank');
+      } else if (note.websiteUrl) {
+        window.open(note.websiteUrl, '_blank');
       }
     } catch (err) {
       console.error("Download tracking failed", err);
-      // Fallback: Open standard link if tracking fails
-      window.open(note.websiteUrl, '_blank');
+      if(note.websiteUrl) window.open(note.websiteUrl, '_blank');
     }
   };
 
   // --- 4. LOGIC: SUBMIT REVIEW ---
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
-    if (!user) return addToast("Please login to review.", "error");
+    if (!user) {
+        addToast("Please login to review.", "error");
+        navigate('/login', { state: { from: `/note/${id}` } });
+        return;
+    }
     if (userRating === 0) return addToast("Please select a star rating.", "error");
 
     setSubmittingReview(true);
@@ -108,21 +139,24 @@ const NoteDetailPage = () => {
       setUserRating(0);
       addToast("Review posted!", "success");
       
-      setNote(prev => ({ ...prev, reviewCount: prev.reviewCount + 1 }));
+      setNote(prev => ({ 
+          ...prev, 
+          reviewCount: (prev.reviewCount || 0) + 1 
+      }));
     } catch (err) {
-      addToast("Failed to post review.", "error");
+      addToast(err.response?.data?.message || "Failed to post review.", "error");
     } finally {
       setSubmittingReview(false);
     }
   };
 
-  // Helper for Preview Window
   const getEmbedUrl = () => {
+    if (!note) return null;
+    
     if (note.videoUrl) {
       const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
       const match = note.videoUrl.match(regExp);
       if (match && match[2].length === 11) return `https://www.youtube.com/embed/${match[2]}`;
-      return null;
     } 
     if (note.googleDriveFileId) {
       return `https://drive.google.com/file/d/${note.googleDriveFileId}/preview`;
@@ -130,19 +164,58 @@ const NoteDetailPage = () => {
     return null;
   };
 
-  if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-900">Loading...</div>;
+  // --- 5. LOGIC: SMART NAVIGATION (Fix for Login Loop) ---
+  const handleBack = () => {
+    // A. If we came from a specific place (like a search result), go back there
+    if (location.state?.from) {
+        navigate(location.state.from);
+        return;
+    }
+
+    // B. If user is logged in, ALWAYS go to Dashboard (never back to Login page)
+    if (user) {
+        navigate('/dashboard');
+    } 
+    // C. If guest, go to Home Page
+    else {
+        navigate('/');
+    }
+  };
+
+  // --- RENDER STATES ---
+
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col items-center justify-center text-gray-900 dark:text-white transition-colors duration-300">
+        <Loader2 className="w-10 h-10 animate-spin text-blue-600 dark:text-blue-400 mb-4" />
+        <p className="text-gray-500 dark:text-slate-400">Loading document details...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col items-center justify-center text-gray-900 dark:text-white p-4 transition-colors duration-300">
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-6 rounded-xl border border-red-200 dark:border-red-900 max-w-md text-center">
+            <p className="font-bold text-lg mb-2">Error Loading Page</p>
+            <p className="mb-4">{error}</p>
+            <Button onClick={() => navigate('/')} variant="outline" className="bg-white dark:bg-slate-900 dark:text-white dark:border-slate-700">Go Back Home</Button>
+        </div>
+    </div>
+  );
+
   if (!note) return null;
 
   return (
-    // Main background is light gray/white, text is dark gray
-    <div className="min-h-screen bg-gray-50 text-gray-900 pb-20">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white pb-20 transition-colors duration-300">
       
-      {/* Header: White background, light gray border */}
-      <div className="bg-white border-b border-gray-200 p-4">
-        <div className="max-w-7xl mx-auto">
-            <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors">
+      {/* Header */}
+      <div className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 p-4 sticky top-0 z-30 shadow-sm transition-colors duration-300">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+            <button 
+                onClick={handleBack} 
+                className="flex items-center text-gray-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium"
+            >
                 <ArrowLeft className="w-5 h-5 mr-2" /> Back
             </button>
+            <ThemeToggle />
         </div>
       </div>
 
@@ -151,101 +224,124 @@ const NoteDetailPage = () => {
         {/* LEFT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
             
-            {/* Info Card: White background, light gray border */}
-            <div className="bg-white border border-gray-300 rounded-xl p-6 shadow-lg">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">{note.title}</h1>
-                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                    <span className="flex items-center"><User className="w-4 h-4 mr-1"/> {note.uploader?.name || 'Unknown'}</span>
-                    <span className="flex items-center"><Calendar className="w-4 h-4 mr-1"/> {new Date(note.createdAt).toLocaleDateString()}</span>
-                    <span className="flex items-center text-yellow-500"><Star className="w-4 h-4 mr-1 fill-yellow-500"/> {note.avgRating?.toFixed(1)} ({note.reviewCount})</span>
-                    <span className="flex items-center text-blue-600"><Download className="w-4 h-4 mr-1"/> {note.downloads} Downloads</span>
+            {/* Info Card */}
+            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm transition-colors duration-300">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-3">{note.title}</h1>
+                
+                <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-slate-400 mb-4">
+                    <span className="flex items-center bg-gray-100 dark:bg-slate-800 px-3 py-1 rounded-full"><User className="w-4 h-4 mr-2 text-gray-500 dark:text-slate-500"/> {note.uploader?.name || 'Unknown'}</span>
+                    <span className="flex items-center bg-gray-100 dark:bg-slate-800 px-3 py-1 rounded-full"><Calendar className="w-4 h-4 mr-2 text-gray-500 dark:text-slate-500"/> {note.createdAt ? new Date(note.createdAt).toLocaleDateString() : 'N/A'}</span>
+                    <span className="flex items-center bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-900/30 px-3 py-1 rounded-full"><Star className="w-4 h-4 mr-2 fill-yellow-500 text-yellow-500"/> {note.avgRating?.toFixed(1) || 0} ({note.reviewCount || 0})</span>
+                    <span className="flex items-center bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/30 px-3 py-1 rounded-full"><Download className="w-4 h-4 mr-2"/> {note.downloads || 0}</span>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                    {note.tags && note.tags.map(tag => (
-                        // Tags: Light blue background, dark blue text, light blue border
-                        <span key={tag} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs border border-blue-300">#{tag}</span>
+
+                <div className="flex flex-wrap gap-2">
+                    {note.tags && note.tags.map((tag, index) => (
+                        <span key={index} className="px-3 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 rounded-md border border-gray-200 dark:border-slate-700">#{tag}</span>
                     ))}
                 </div>
             </div>
 
-            {/* Embed Viewer: White background, light gray border */}
-            <div className="bg-white border border-gray-300 rounded-xl overflow-hidden aspect-video relative">
-                {getEmbedUrl() ? (
-                    <iframe src={getEmbedUrl()} className="w-full h-full" allowFullScreen title="Content Preview" />
+            {/* Embed Viewer */}
+            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden aspect-video relative shadow-sm transition-colors duration-300">
+                {user ? (
+                    getEmbedUrl() ? (
+                        <iframe src={getEmbedUrl()} className="w-full h-full" allowFullScreen title="Content Preview" />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center flex-col text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-slate-950">
+                            <FileText className="w-16 h-16 mb-4 text-gray-300 dark:text-slate-600" />
+                            <p>Preview not available for this file type.</p>
+                            <p className="text-sm mt-2">Please use the download button.</p>
+                        </div>
+                    )
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center flex-col text-gray-500">
-                        <FileText className="w-16 h-16 mb-4" />
-                        <p>Preview not available</p>
+                    <div className="w-full h-full flex items-center justify-center flex-col bg-gray-100 dark:bg-slate-800/50 text-gray-600 dark:text-slate-300">
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-full shadow-sm mb-4">
+                            <Lock className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <p className="font-bold text-lg">Login to preview this document</p>
+                        <p className="text-sm text-gray-500 dark:text-slate-500 mb-4">Access is restricted to registered members</p>
+                        <Button onClick={() => navigate('/login', { state: { from: `/note/${id}` } })} className="bg-blue-600 hover:bg-blue-700 text-white px-6">Login Now</Button>
                     </div>
                 )}
             </div>
 
-            {/* --- SPLIT BUTTONS --- */}
-            <div className="grid grid-cols-2 gap-4">
-                {/* Preview Button (Outline): Dark text, light gray border/hover */}
-                <Button onClick={handlePreview} variant="outline" className="py-6 text-lg border-gray-400 text-gray-900 hover:bg-gray-100">
-                    <Eye className="w-6 h-6 mr-2" /> Preview
+            {/* Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Button onClick={handlePreview} variant="outline" className="h-14 text-base border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 hover:border-gray-400 dark:hover:border-slate-600">
+                    <Eye className="w-5 h-5 mr-2" /> Open External Link
                 </Button>
 
-                {/* Download Button */}
-                <Button onClick={handleDownload} className="py-6 text-lg bg-blue-600 hover:bg-blue-700">
-                    <Download className="w-6 h-6 mr-2" /> Download
+                <Button onClick={handleDownload} className="h-14 text-base bg-blue-600 dark:bg-blue-600 hover:bg-blue-700 dark:hover:bg-blue-500 text-white shadow-lg shadow-blue-500/30">
+                    <Download className="w-5 h-5 mr-2" /> Download Material
                 </Button>
             </div>
         </div>
 
         {/* RIGHT COLUMN: REVIEWS */}
         <div className="space-y-6">
-            {/* Write a Review Card: White background, light gray border */}
-            <div className="bg-white border border-gray-300 rounded-xl p-6 shadow-lg">
-                <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center"><MessageSquare className="w-5 h-5 mr-2"/> Write a Review</h3>
+            {/* Write Review */}
+            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm transition-colors duration-300">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-blue-500"/> Write a Review</h3>
                 <form onSubmit={handleReviewSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm text-gray-600 mb-2">Rating</label>
+                        <label className="block text-xs font-bold uppercase text-gray-500 dark:text-slate-500 mb-2">Your Rating</label>
                         <div className="flex gap-2">
                             {[1, 2, 3, 4, 5].map((star) => (
                                 <Star 
                                     key={star} 
-                                    className={`w-8 h-8 cursor-pointer transition-colors ${star <= userRating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400'}`}
+                                    className={`w-8 h-8 cursor-pointer transition-transform hover:scale-110 ${star <= userRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200 dark:text-slate-700 fill-gray-100 dark:fill-slate-800'}`}
                                     onClick={() => setUserRating(star)}
                                 />
                             ))}
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm text-gray-600 mb-2">Comment</label>
+                        <label className="block text-xs font-bold uppercase text-gray-500 dark:text-slate-500 mb-2">Your Comment</label>
                         <textarea 
-                            // Textarea: Light gray background, light gray border, dark text
-                            className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-700 rounded-xl p-3 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-600"
                             rows="3"
-                            placeholder="Was this helpful?"
+                            placeholder={user ? "How was this material?" : "Please login to comment..."}
                             value={userComment}
                             onChange={(e) => setUserComment(e.target.value)}
+                            disabled={!user}
                         />
                     </div>
-                    <Button type="submit" disabled={submittingReview} className="w-full">
-                        {submittingReview ? "Posting..." : "Submit Review"}
+                    <Button type="submit" disabled={submittingReview || !user} className="w-full bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-xl">
+                        {submittingReview ? <Loader2 className="animate-spin w-4 h-4"/> : "Submit Review"}
                     </Button>
                 </form>
             </div>
 
-            {/* Community Reviews Card: White background, light gray border */}
-            <div className="bg-white border border-gray-300 rounded-xl p-6 max-h-[600px] overflow-y-auto shadow-lg">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Community Reviews ({reviews.length})</h3>
+            {/* Community Reviews */}
+            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-6 max-h-[600px] overflow-y-auto shadow-sm custom-scrollbar transition-colors duration-300">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Reviews ({reviews.length})</h3>
                 {reviews.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No reviews yet.</p>
+                    <div className="text-center py-8 text-gray-400 dark:text-slate-500 bg-gray-50 dark:bg-slate-950 rounded-xl border border-dashed border-gray-200 dark:border-slate-800">
+                        <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50"/>
+                        <p className="text-sm">No reviews yet. Be the first!</p>
+                    </div>
                 ) : (
                     <div className="space-y-4">
                         {reviews.map(review => (
-                            <div key={review._id} className="border-b border-gray-200 pb-4 last:border-0">
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="font-semibold text-gray-900">{review.user?.name || 'Anonymous'}</span>
-                                    <span className="text-xs text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</span>
+                            <div key={review._id} className="border-b border-gray-100 dark:border-slate-800 pb-4 last:border-0 last:pb-0">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="flex items-center">
+                                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs mr-3">
+                                            {review.user?.name?.[0] || 'U'}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-sm text-gray-900 dark:text-white">{review.user?.name || 'Anonymous'}</p>
+                                            <div className="flex text-yellow-400 text-[10px]">
+                                                {[...Array(5)].map((_, i) => (
+                                                    <Star key={i} className={`w-3 h-3 ${i < review.rating ? 'fill-yellow-400' : 'text-gray-200 dark:text-slate-700 fill-gray-200 dark:fill-slate-800'}`}/>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="text-xs text-gray-400 dark:text-slate-500">{new Date(review.createdAt).toLocaleDateString()}</span>
                                 </div>
-                                <div className="flex text-yellow-500 text-xs mb-2">
-                                    {[...Array(review.rating)].map((_, i) => <Star key={i} className="w-3 h-3 fill-yellow-500"/>)}
-                                </div>
-                                <p className="text-sm text-gray-700">{review.comment}</p>
+                                <p className="text-sm text-gray-600 dark:text-slate-300 pl-11">{review.comment}</p>
                             </div>
                         ))}
                     </div>

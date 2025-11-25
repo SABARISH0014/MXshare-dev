@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { flushSync } from "react-dom";
 import { PlayCircle, Cloud, X, Loader2, Send, CheckCircle } from 'lucide-react';
 import axios from 'axios';
@@ -29,6 +29,7 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
   // =============================
   const linkDriveAccount = useGoogleLogin({
     flow: 'auth-code',
+    // Ensure scope allows file management (drive.file is usually sufficient for files created by the app)
     scope: "openid profile email https://www.googleapis.com/auth/drive.file",
     onSuccess: async (codeResponse) => {
       try {
@@ -71,7 +72,7 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
   }, []);
 
   // =============================
-  // CUSTOM EVENT LISTENER (CORE!)
+  // CUSTOM EVENT LISTENER
   // =============================
   useEffect(() => {
     const onFileSelected = (event) => {
@@ -105,6 +106,34 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
   };
 
   // =============================
+  // 🛑 UPDATED: CLEANUP FUNCTION
+  // =============================
+  const handleFormCancel = async () => {
+    // If we have a file ID and a valid Google Token, ask Backend to delete it
+    if (driveFile && driveFile.fileId && googleAccessToken) {
+      try {
+        addToast("Removing uploaded file...", "info");
+        
+        // Call YOUR backend, not Google directly
+        await axios.post(`${API_BASE_URL}/api/notes/drive-cleanup`, {
+            fileId: driveFile.fileId,
+            googleToken: googleAccessToken
+        }, {
+            headers: { Authorization: `Bearer ${authToken}` }
+        });
+        
+        addToast("File removed from Drive.", "success");
+      } catch (error) {
+        console.error("Cleanup failed:", error);
+        // Fail silently so the user isn't stuck
+      }
+    }
+    
+    // Reset the UI
+    resetAll();
+  };
+
+  // =============================
   // YOUTUBE EMBED
   // =============================
   const getYoutubeEmbed = (url) => {
@@ -117,7 +146,7 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
   };
 
   // =============================
-  // OPEN GOOGLE PICKER (EVENT → FORM LOGIC)
+  // OPEN GOOGLE PICKER
   // =============================
   const openGooglePicker = () => {
     if (!pickerLoaded) return addToast("Picker loading...", "info");
@@ -180,7 +209,7 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
           name: customTitle,
           subject,
           semester,
-          cleanup: true,   // <-- YOU FORGOT THIS!
+          cleanup: true, 
           tags
         }, config);
       } else {
@@ -216,20 +245,20 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
   const removeTag = (t) => setTags(tags.filter(tag => tag !== t));
 
   // =============================
-  // RENDER (LIGHT MODE)
+  // RENDER (THEME AWARE)
   // =============================
 
   if (viewMode === "MAIN") {
     return (
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 h-full flex flex-col justify-center">
+      <div className="bg-white dark:bg-slate-900 dim:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 dim:border-slate-600 p-8 h-full flex flex-col justify-center transition-colors">
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-8 text-center">
           Share Learning Material
         </h2>
 
         {!googleAccessToken ? (
-          <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl text-center mb-6">
-            <p className="text-blue-800 mb-4 text-sm">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-6 rounded-xl text-center mb-6">
+            <p className="text-blue-800 dark:text-blue-300 mb-4 text-sm">
               Connect Google Drive before uploading.
             </p>
 
@@ -245,20 +274,20 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
             
             <button
               onClick={openGooglePicker}
-              className="flex flex-col items-center justify-center p-8 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-all hover:shadow-md"
+              className="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-slate-800 dim:bg-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700 dim:hover:bg-slate-600 border border-gray-200 dark:border-slate-700 dim:border-slate-600 rounded-xl transition-all hover:shadow-md group"
             >
-              <Cloud className="w-14 h-14 text-blue-600 mb-3" />
-              <span className="text-lg font-bold text-gray-800">Upload File</span>
-              <span className="text-xs text-gray-500 mt-1">Google Drive</span>
+              <Cloud className="w-14 h-14 text-blue-600 dark:text-blue-500 mb-3" />
+              <span className="text-lg font-bold text-gray-800 dark:text-white">Upload File</span>
+              <span className="text-xs text-gray-500 dark:text-slate-400 mt-1">Google Drive</span>
             </button>
 
             <button
               onClick={() => { setVideoUrl(''); setViewMode('FORM'); }}
-              className="flex flex-col items-center justify-center p-8 bg-gray-50 hover:bg-red-50 border border-gray-200 rounded-xl transition-all hover:shadow-md"
+              className="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-slate-800 dim:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 border border-gray-200 dark:border-slate-700 dim:border-slate-600 rounded-xl transition-all hover:shadow-md group"
             >
               <PlayCircle className="w-14 h-14 text-red-500 mb-3" />
-              <span className="text-lg font-bold text-gray-800">Video Link</span>
-              <span className="text-xs text-gray-500 mt-1">YouTube / Vimeo</span>
+              <span className="text-lg font-bold text-gray-800 dark:text-white">Video Link</span>
+              <span className="text-xs text-gray-500 dark:text-slate-400 mt-1">YouTube / Vimeo</span>
             </button>
 
           </div>
@@ -268,27 +297,28 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
   }
 
   // =============================
-  // FORM VIEW
+  // FORM VIEW (THEME AWARE)
   // =============================
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 h-full overflow-y-auto">
+    <div className="bg-white dark:bg-slate-900 dim:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 dim:border-slate-600 p-6 h-full overflow-y-auto transition-colors">
 
-      <div className="flex justify-between items-center mb-5 border-b border-gray-200 pb-4">
-        <h3 className="text-xl font-bold text-gray-900">Finalize Details</h3>
+      <div className="flex justify-between items-center mb-5 border-b border-gray-200 dark:border-slate-700 pb-4">
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white">Finalize Details</h3>
 
-        <Button variant="ghost" onClick={resetAll}>
+        {/* ✅ UPDATED: Use handleFormCancel instead of resetAll */}
+        <Button variant="ghost" onClick={handleFormCancel}>
           <X className="w-4 h-4 mr-1" /> Cancel
         </Button>
       </div>
 
       {/* Preview */}
-      <div className="mb-6 bg-gray-50 rounded-lg border border-gray-200 p-4 flex flex-col items-center">
+      <div className="mb-6 bg-gray-50 dark:bg-slate-800 dim:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-700 dim:border-slate-600 p-4 flex flex-col items-center transition-colors">
 
         {driveFile ? (
           <>
-            <img src={driveFile.iconUrl} className="w-10 h-10 mb-3" />
-            <p className="text-gray-700 font-semibold">{driveFile.name}</p>
-            <span className="text-xs text-green-600 mt-2 flex gap-1 items-center">
+            <img src={driveFile.iconUrl} className="w-10 h-10 mb-3" alt="File Icon" />
+            <p className="text-gray-700 dark:text-slate-200 font-semibold text-center">{driveFile.name}</p>
+            <span className="text-xs text-green-600 dark:text-green-400 mt-2 flex gap-1 items-center">
               <CheckCircle className="w-3 h-3" /> Ready to Transfer
             </span>
           </>
@@ -303,7 +333,7 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
 
             {getYoutubeEmbed(videoUrl) && (
               <div className="mt-4 aspect-video bg-black rounded overflow-hidden">
-                <iframe src={getYoutubeEmbed(videoUrl)} className="w-full h-full" allowFullScreen />
+                <iframe src={getYoutubeEmbed(videoUrl)} className="w-full h-full" allowFullScreen title="Video Preview" />
               </div>
             )}
           </div>
@@ -334,14 +364,15 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
 
         {/* TAGS */}
         <div>
-          <label className="block text-xs font-bold text-gray-600 mb-1">Tags</label>
+          <label className="block text-xs font-bold text-gray-600 dark:text-slate-400 mb-1">Tags</label>
 
           <div className="flex gap-2">
             <input
-              className="flex-1 h-10 rounded-md border border-gray-300 px-3 text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
+              className="flex-1 h-10 rounded-md border border-gray-300 dark:border-slate-700 dim:border-slate-600 px-3 text-gray-900 dark:text-white bg-white dark:bg-slate-900 dim:bg-slate-800 focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400 dark:placeholder:text-slate-500 outline-none transition-colors"
               placeholder="Add tag..."
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addTag()}
             />
 
             <Button variant="secondary" onClick={addTag}>Add</Button>
@@ -351,10 +382,10 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
             {tags.map(t => (
               <span
                 key={t}
-                className="px-3 py-1 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-2"
+                className="px-3 py-1 rounded-full text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-2"
               >
                 {t}
-                <button onClick={() => removeTag(t)} className="text-blue-900 hover:text-red-600">&times;</button>
+                <button onClick={() => removeTag(t)} className="text-blue-900 dark:text-blue-200 hover:text-red-600 dark:hover:text-red-400">&times;</button>
               </span>
             ))}
           </div>

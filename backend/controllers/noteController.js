@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { google } from 'googleapis';
 import { Readable } from 'stream'; // <--- THIS IS THE FIX
+import axios from 'axios'; // <--- 🛑 ADD THIS LINE
 import { robotDrive } from '../utils/robotDrive.js';
 import { Note } from '../models/Note.js';
 import { History } from '../models/History.js';
@@ -463,4 +464,47 @@ export const trackDownload = async (req, res) => {
     console.error('[DEBUG] ❌ General Error:', err);
     return res.status(500).json({ message: 'Error tracking download' });
   }
+};
+
+export const cleanupDriveFile = async (req, res) => {
+    try {
+        const { fileId, googleToken } = req.body;
+
+        console.log(`[Cleanup] Attempting to delete file: ${fileId}`);
+
+        if (!fileId || !googleToken) {
+            console.log("[Cleanup] Missing ID or Token");
+            return res.status(400).json({ message: "Missing parameters" });
+        }
+
+        // 1. Call Google
+        const googleResponse = await axios.delete(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+            headers: {
+                Authorization: `Bearer ${googleToken}`
+            }
+        });
+
+        // 2. Log Success
+        console.log(`[Cleanup] Google Response Status: ${googleResponse.status}`);
+        res.status(200).json({ message: "File deleted successfully" });
+
+    } catch (error) {
+        // 3. DETAILED ERROR LOGGING
+        if (error.response) {
+            // The request was made and the server responded with a status code
+            // that falls out of the range of 2xx
+            console.error("[Cleanup] Google API Error Data:", JSON.stringify(error.response.data, null, 2));
+            console.error("[Cleanup] Google API Status:", error.response.status);
+        } else if (error.request) {
+            // The request was made but no response was received
+            console.error("[Cleanup] No response from Google:", error.request);
+        } else {
+            // Something happened in setting up the request that triggered an Error
+            console.error("[Cleanup] Setup Error:", error.message);
+        }
+
+        // Return 200 anyway so the Frontend UI doesn't freeze, 
+        // but check your SERVER CONSOLE for the error log above.
+        res.status(200).json({ message: "Cleanup failed but ignored" });
+    }
 };

@@ -254,21 +254,15 @@ const App = () => {
           } 
         />
         
-        <Route path="/note/:id" element={
-            <ProtectedRoute>
-              <UserDashboard
-                user={user}
-                onLogout={onLogout}
-                allNotes={allNotes}
-                setAllNotes={setAllNotes}
-                currentView="detail" 
-                onDashboardViewChange={onDashboardViewChange}
-              >
-                <NoteDetailPage />
-              </UserDashboard>
-            </ProtectedRoute>
-          } 
-        />
+        {/* Remove UserDashboard wrapper. NoteDetailPage handles its own layout. */}
+<Route 
+  path="/note/:id" 
+  element={
+    <ProtectedRoute>
+      <NoteDetailPage />
+    </ProtectedRoute>
+  } 
+/>
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
