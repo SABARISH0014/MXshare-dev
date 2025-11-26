@@ -35,7 +35,7 @@ const AuthPage = ({ type = "Login", onNavigate, onAuthSuccess }) => {
     flow: "auth-code",
     ux_mode: "redirect",
     scope: "openid profile email https://www.googleapis.com/auth/drive.readonly",
-    redirect_uri: "http://localhost:5173/auth/google/callback",
+    redirect_uri: `${window.location.origin}/auth/google/callback`,
     onError: () => addToast("Google login failed", "error"),
   });
 
