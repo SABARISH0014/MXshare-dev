@@ -1,6 +1,5 @@
 import { io } from 'socket.io-client';
-
-const API_BASE_URL = 'http://localhost:3001'; 
+import { API_BASE_URL } from './data/constants'
 
 export const socket = io(API_BASE_URL, {
   transports: ["websocket"]
