@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
-dotenv.config();
+dotenv.config(); // Call this once at the very top
+
 import express from 'express';
 import http from 'http';
 import { Server as SocketIoServer } from 'socket.io';
@@ -9,8 +10,8 @@ import cookieParser from 'cookie-parser';
 import { connectDB } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import noteRoutes from './routes/noteRoutes.js';
-
-dotenv.config();
+// 1. IMPORT THE ENGINE
+import gamificationEngine from './services/GamificationEngine.js'; 
 
 // --- Config ---
 const PORT = process.env.PORT || 3001;
@@ -38,7 +39,11 @@ const io = new SocketIoServer(server, {
   cors: { origin: FRONTEND_URL, methods: ['GET', 'POST'], credentials: true }
 });
 
-// Inject IO into Request object for Controllers
+// 2. INITIALIZE ENGINE WITH SOCKET
+// This allows the engine to push updates (XP gain, Quest Complete) instantly
+gamificationEngine.initialize(io);
+
+// Inject IO into Request object for Controllers (Optional now, but good to keep)
 app.use((req, res, next) => {
   req.io = io;
   next();
@@ -56,6 +61,15 @@ app.use('/api/notes', noteRoutes);
 // --- Socket Connection Logging ---
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);
+
+  // 3. LISTEN FOR USER ROOM JOIN
+  // The Frontend will emit this when the user logs in.
+  // This enables us to say io.to(userId).emit(...)
+  socket.on('join_user_room', (userId) => {
+      socket.join(userId); 
+      console.log(`User ${userId} joined room for live notifications`);
+  });
+
   socket.on('disconnect', () => console.log(`Socket disconnected: ${socket.id}`));
 });
 

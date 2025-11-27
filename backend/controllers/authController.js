@@ -6,6 +6,7 @@ import {
   verifyRefreshTokenHash, rotateRefreshToken, removeRefreshTokenHash 
 } from '../utils/tokenService.js';
 import { oAuth2ClientForCodeExchange } from '../utils/googleClient.js';
+import gamificationEngine from '../services/GamificationEngine.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const REDIRECT_URL = process.env.REDIRECT_URL || `${FRONTEND_URL}/auth/google/callback`;
@@ -42,6 +43,8 @@ export const signup = async (req, res) => {
 
     await newUser.save();
 
+    await gamificationEngine.checkDailyReset(newUser);
+
     // Return success. Do not generate tokens yet to force login flow.
     return res.status(201).json({
       message: "Account created! Please log in.",
@@ -69,6 +72,8 @@ export const login = async (req, res) => {
     
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials." });
+
+    await gamificationEngine.checkDailyReset(user);
 
     // 1. Generate App Tokens (JWT)
     const accessToken = signAccessToken(user);
@@ -165,6 +170,8 @@ export const googleCallback = async (req, res) => {
     }
 
     await user.save();
+    
+    await gamificationEngine.checkDailyReset(user);
 
     const accessToken = signAccessToken(user);
     const appRefreshToken = generateRefreshTokenString();
@@ -207,6 +214,10 @@ export const getMe = async (req, res) => {
     const user = await User.findById(req.user.id).select('-password -refreshTokens -accessToken');
     
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (!user.dailyQuestProgress || user.dailyQuestProgress.quests.length === 0) {
+        await gamificationEngine.checkDailyReset(user);
+    }
 
     let freshGoogleToken = null;
     

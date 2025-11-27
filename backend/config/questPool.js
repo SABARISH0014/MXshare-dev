@@ -1,5 +1,3 @@
-// server/config/questPool.js
-
 const QUEST_POOL = [
     // --- UPLOAD QUESTS ---
     { id: 'upload_1', label: 'The Contributor', description: 'Upload 1 new note', eventTrigger: 'NOTE_UPLOAD', targetCount: 1, xpReward: 50 },
@@ -15,4 +13,5 @@ const QUEST_POOL = [
     { id: 'download_1', label: 'Offline Learner', description: 'Download 1 note', eventTrigger: 'NOTE_DOWNLOAD', targetCount: 1, xpReward: 40 },
 ];
 
-module.exports = QUEST_POOL;
+// vvv CHANGE THIS LINE FROM module.exports TO export default vvv
+export default QUEST_POOL;

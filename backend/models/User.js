@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 
+// --- Refresh Token Schema (unchanged) ---
 const RefreshTokenSchema = new mongoose.Schema({
   tokenHash: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
@@ -8,17 +9,18 @@ const RefreshTokenSchema = new mongoose.Schema({
 }, { _id: false });
 
 // --- UPDATED: Quest Sub-schema ---
-// We store full details here so if the Quest Pool changes later, 
-// the user's active quest for the day doesn't break.
 const QuestProgressSchema = new mongoose.Schema({
   questId: { type: String, required: true },
-  label: { type: String, required: true },       // e.g. "Research Marathon"
-  description: { type: String, default: '' },    // e.g. "View 5 notes"
-  eventTrigger: { type: String, required: true },// e.g. 'NOTE_VIEW'
-  targetCount: { type: Number, required: true }, // e.g. 5
-  xpReward: { type: Number, required: true },    // e.g. 100
+  label: { type: String, required: true },
+  description: { type: String, default: '' },
+  eventTrigger: { type: String, required: true },
+  targetCount: { type: Number, required: true },
+  xpReward: { type: Number, required: true },
   progress: { type: Number, default: 0 },
-  completed: { type: Boolean, default: false }
+  completed: { type: Boolean, default: false },
+  
+  // NEW: Tracks when a quest was moved to history
+  completedAt: { type: Date } 
 }, { _id: false });
 
 const UserSchema = new mongoose.Schema({
@@ -45,12 +47,24 @@ const UserSchema = new mongoose.Schema({
   
   dailyQuestProgress: {
     lastReset: { type: Date, default: Date.now },
-    quests: { type: [QuestProgressSchema], default: [] }
+    
+    // The Active Quests (Visible on Dashboard)
+    quests: { type: [QuestProgressSchema], default: [] },
+
+    // NEW: The History (Quests disappear from 'quests' and move here)
+    completedHistory: { type: [QuestProgressSchema], default: [] },
+
+    // NEW: Tracks consecutive days logged in/active
+    streak: { type: Number, default: 0 },
+
+    // NEW: Allows user to swap 1 quest per day
+    rerollsLeft: { type: Number, default: 1 }
   }
 
 }, { timestamps: true });
 
 // --- Helper Method: Calculate Level ---
+// This uses a linear progression (Level up every 100 XP)
 UserSchema.methods.calculateLevel = function() {
     return Math.floor(this.xp / 100) + 1;
 };
