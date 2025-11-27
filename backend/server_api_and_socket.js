@@ -12,7 +12,7 @@ import authRoutes from './routes/authRoutes.js';
 import noteRoutes from './routes/noteRoutes.js';
 // 1. IMPORT THE ENGINE
 import gamificationEngine from './services/GamificationEngine.js'; 
-
+import gamificationRoutes from './routes/gamificationRoutes.js';
 // --- Config ---
 const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -25,9 +25,13 @@ const server = http.createServer(app);
 // --- Database ---
 connectDB();
 
+const allowedOrigins = [
+  'http://localhost:5173', 
+  'http://localhost:5174'
+];
 // --- Middleware ---
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json());
@@ -36,7 +40,7 @@ app.use(cookieParser(COOKIE_SECRET));
 
 // --- Socket.IO ---
 const io = new SocketIoServer(server, {
-  cors: { origin: FRONTEND_URL, methods: ['GET', 'POST'], credentials: true }
+  cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true }
 });
 
 // 2. INITIALIZE ENGINE WITH SOCKET
@@ -57,7 +61,7 @@ app.use((req, res, next) => {
 // --- Routes ---
 app.use('/api/auth', authRoutes);
 app.use('/api/notes', noteRoutes);
-
+app.use('/api/gamification', gamificationRoutes);
 // --- Socket Connection Logging ---
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);

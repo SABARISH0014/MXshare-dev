@@ -336,3 +336,23 @@ export const updateProfile = async (req, res) => {
     res.status(500).json({ message: "Failed to update profile" });
   }
 };
+
+export const getProfile = async (req, res) => {
+    try {
+        // 1. Get user
+        const user = await User.findById(req.user.id).select('-password');
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        // 2. Gamification Safety Net
+        // If the user has no quest data (e.g. old account), generate it now
+        if (!user.dailyQuestProgress || user.dailyQuestProgress.quests.length === 0) {
+            await gamificationEngine.checkDailyReset(user);
+        }
+
+        // 3. Return the clean user object
+        res.json(user);
+    } catch (error) {
+        console.error("Get Profile Error:", error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};

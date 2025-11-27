@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flame, Trophy, RefreshCw, CheckCircle, Zap } from 'lucide-react';
+import { Flame, RefreshCw, CheckCircle, Zap } from 'lucide-react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 
-// Contexts (Assuming you have these, if not, pass data via props)
+// Contexts
 import { AuthContext } from '../context/AuthContext'; 
 import { ToastContext } from '../context/ToastContext';
-import { API_BASE_URL } from '../data/constants'; // e.g., 'http://localhost:3001'
+import { API_BASE_URL } from '../data/constants';
 
+// Initialize Socket outside component to prevent multiple connections
 const socket = io(API_BASE_URL);
 
 const QuestWidget = () => {
-    const { user, token } = useContext(AuthContext); // Need user._id and auth token
+    // 1. FIX: Destructure 'authToken' (not 'token') to match your Context
+    const { user, authToken } = useContext(AuthContext); 
     const { addToast } = useContext(ToastContext);
 
     const [quests, setQuests] = useState([]);
@@ -20,65 +22,65 @@ const QuestWidget = () => {
     const [loading, setLoading] = useState(true);
     const [rerolling, setRerolling] = useState(false);
 
-    // 1. Initial Fetch
+    // 2. Initial Fetch
     useEffect(() => {
         const fetchData = async () => {
-            if (!token) return;
+            // Safety Check: If no token, stop loading and exit.
+            if (!authToken) {
+                setLoading(false); 
+                return;
+            }
+
             try {
-                // Assuming you have an endpoint returning profile + gamification data
                 const res = await axios.get(`${API_BASE_URL}/api/auth/profile`, {
-                    headers: { Authorization: `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${authToken}` }
                 });
                 
-                // Set initial state from DB
                 const d = res.data; 
-                setQuests(d.dailyQuestProgress.quests);
+                
+                // Safety check for missing data
+                const questData = d.dailyQuestProgress || {};
+                
+                setQuests(questData.quests || []);
                 setStats({
-                    level: d.level,
-                    xp: d.xp,
-                    streak: d.dailyQuestProgress.streak,
-                    rerollsLeft: d.dailyQuestProgress.rerollsLeft
+                    level: d.level || 1,
+                    xp: d.xp || 0,
+                    streak: questData.streak || 0,
+                    rerollsLeft: questData.rerollsLeft ?? 1 
                 });
             } catch (err) {
                 console.error("Failed to load quests", err);
             } finally {
+                // This ensures the loading animation ALWAYS stops
                 setLoading(false);
             }
         };
-        fetchData();
-    }, [token]);
 
-    // 2. Socket.io Connection
+        fetchData();
+    }, [authToken]); // Dependency is now authToken
+
+    // 3. Socket.io Connection
     useEffect(() => {
         if (!user?._id) return;
 
-        // Join the room identified by User ID
         socket.emit('join_user_room', user._id);
 
-        // LISTEN: Live Progress Updates & Completions
         socket.on('quest_update', (data) => {
-            // data contains: { updatedQuests, xpGained, completedQuestIds, leveledUp }
-            
-            // 1. Update Quests (Completed ones will be missing from this array)
             setQuests(data.updatedQuests);
-            
-            // 2. Update Stats
             setStats(prev => ({
                 ...prev,
                 xp: data.totalXp,
                 level: data.currentLevel
             }));
 
-            // 3. UI Feedback
             if (data.completedQuestIds && data.completedQuestIds.length > 0) {
                 addToast(`Quest Complete! +${data.xpGained} XP`, "success");
             }
             if (data.leveledUp) {
-                addToast(`LEVEL UP! You represent level ${data.currentLevel}!`, "success");
+                addToast(`LEVEL UP! You are now level ${data.currentLevel}!`, "success");
             }
         });
 
-        // LISTEN: Daily Reset (Midnight)
         socket.on('daily_reset', (data) => {
             setQuests(data.quests);
             setStats(prev => ({ ...prev, streak: data.streak, rerollsLeft: 1 }));
@@ -91,14 +93,14 @@ const QuestWidget = () => {
         };
     }, [user, addToast]);
 
-    // 3. Handle Reroll
+    // 4. Handle Reroll
     const handleReroll = async (questId) => {
         if (stats.rerollsLeft <= 0) return;
         setRerolling(true);
         try {
             const res = await axios.post(`${API_BASE_URL}/api/gamification/reroll`, 
                 { questId }, 
-                { headers: { Authorization: `Bearer ${token}` }}
+                { headers: { Authorization: `Bearer ${authToken}` }}
             );
             
             setQuests(res.data.newQuests);
@@ -111,17 +113,26 @@ const QuestWidget = () => {
         }
     };
 
-    // --- Helper: Calculate XP Bar Width ---
     const getXpProgress = () => {
-        // Based on your formula: Level = Floor(XP / 100) + 1
-        // So progress within level is XP % 100
         return stats.xp % 100;
     };
 
-    if (loading) return <div className="animate-pulse h-64 bg-gray-100 rounded-xl"></div>;
+    // LOADING STATE SKELETON
+    if (loading) {
+        return (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 h-full border border-gray-100 dark:border-slate-800 animate-pulse">
+                <div className="h-6 bg-gray-200 dark:bg-slate-800 rounded w-1/3 mb-4"></div>
+                <div className="space-y-3">
+                    <div className="h-16 bg-gray-100 dark:bg-slate-800 rounded-xl"></div>
+                    <div className="h-16 bg-gray-100 dark:bg-slate-800 rounded-xl"></div>
+                    <div className="h-16 bg-gray-100 dark:bg-slate-800 rounded-xl"></div>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-gray-100 dark:border-slate-800 p-6">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 p-6 h-full flex flex-col">
             
             {/* Header: Level & Streak */}
             <div className="flex justify-between items-end mb-6">
@@ -131,7 +142,7 @@ const QuestWidget = () => {
                         <div className="bg-indigo-600 text-white text-xs font-bold px-2 py-1 rounded">
                             LVL {stats.level}
                         </div>
-                        <div className="w-32 h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div className="w-24 h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
                             <motion.div 
                                 initial={{ width: 0 }}
                                 animate={{ width: `${getXpProgress()}%` }}
@@ -149,15 +160,15 @@ const QuestWidget = () => {
             </div>
 
             {/* Quest List */}
-            <div className="space-y-4">
+            <div className="space-y-4 flex-grow">
                 <AnimatePresence mode='popLayout'>
                     {quests.length === 0 ? (
                         <motion.div 
                             initial={{ opacity: 0 }} 
                             animate={{ opacity: 1 }}
-                            className="text-center py-8 text-gray-400"
+                            className="text-center py-8 text-gray-400 flex flex-col items-center justify-center h-full"
                         >
-                            <CheckCircle className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                            <CheckCircle className="w-12 h-12 mb-2 opacity-20" />
                             <p>All quests completed!</p>
                             <p className="text-xs">Come back tomorrow.</p>
                         </motion.div>
@@ -178,13 +189,15 @@ const QuestWidget = () => {
     );
 };
 
-// --- Sub-Component: Individual Card ---
-const QuestCard = ({ quest, onReroll, canReroll, isRerolling }) => {
+// CORRECTED COMPONENT
+// We must wrap the function in React.forwardRef to expose 'ref'
+const QuestCard = React.forwardRef(({ quest, onReroll, canReroll, isRerolling }, ref) => {
     const percentage = Math.min(100, (quest.progress / quest.targetCount) * 100);
 
     return (
         <motion.div
-            layout // Magic prop for smooth reordering
+            ref={ref} // <--- Now 'ref' exists because of forwardRef above
+            layout 
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.5, x: 100, transition: { duration: 0.2 } }}
@@ -192,7 +205,7 @@ const QuestCard = ({ quest, onReroll, canReroll, isRerolling }) => {
         >
             <div className="flex justify-between items-start mb-2">
                 <div>
-                    <h3 className="font-bold text-gray-800 dark:text-gray-200">{quest.label}</h3>
+                    <h3 className="font-bold text-sm text-gray-800 dark:text-gray-200">{quest.label}</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{quest.description}</p>
                 </div>
                 <div className="text-xs font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 rounded-full flex items-center gap-1">
@@ -202,7 +215,7 @@ const QuestCard = ({ quest, onReroll, canReroll, isRerolling }) => {
             </div>
 
             {/* Progress Bar */}
-            <div className="relative h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden mt-3">
+            <div className="relative h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden mt-3">
                 <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: `${percentage}%` }}
@@ -210,19 +223,19 @@ const QuestCard = ({ quest, onReroll, canReroll, isRerolling }) => {
                     className="absolute top-0 left-0 h-full bg-indigo-500"
                 />
             </div>
-            <div className="flex justify-between mt-1">
+            <div className="flex justify-between mt-2 items-center">
                 <span className="text-[10px] text-gray-400 font-mono">
                     {quest.progress} / {quest.targetCount}
                 </span>
                 
-                {/* Reroll Button (Only show if 0 progress to prevent cheating, or always show if you prefer) */}
+                {/* Reroll Button (Visible if progress is 0) */}
                 {quest.progress === 0 && (
                     <button 
                         onClick={onReroll}
                         disabled={!canReroll || isRerolling}
-                        className={`text-[10px] flex items-center gap-1 transition-colors
+                        className={`text-[10px] flex items-center gap-1 transition-colors px-2 py-0.5 rounded
                             ${canReroll 
-                                ? 'text-gray-400 hover:text-indigo-500 cursor-pointer' 
+                                ? 'text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer' 
                                 : 'text-gray-300 cursor-not-allowed opacity-50'
                             }`}
                         title={canReroll ? "Swap this quest" : "No rerolls left today"}
@@ -234,6 +247,6 @@ const QuestCard = ({ quest, onReroll, canReroll, isRerolling }) => {
             </div>
         </motion.div>
     );
-};
+});
 
 export default QuestWidget;

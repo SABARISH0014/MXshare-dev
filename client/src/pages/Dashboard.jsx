@@ -35,21 +35,44 @@ const LucideIcons = {
 // 1. VISUAL & GAMIFICATION SUB-COMPONENTS
 // ==================================================================================
 
-// --- IMPACT ANALYTICS CHART ---
+// --- IMPACT ANALYTICS CHART (LIVE DATA) ---
 const ImpactAnalytics = ({ notes = [] }) => {
+    // 1. Calculate Totals
     const totalViews = notes.reduce((acc, n) => acc + (n.downloads || 0), 0);
     
-    // Mock Distribution Data (In a real app, this comes from backend history)
-    const data = [
-        { label: 'Mon', val: 12 },
-        { label: 'Tue', val: 24 },
-        { label: 'Wed', val: 18 },
-        { label: 'Thu', val: 45 },
-        { label: 'Fri', val: 30 },
-        { label: 'Sat', val: 55 },
-        { label: 'Sun', val: totalViews > 60 ? 60 : totalViews } 
-    ];
-    const max = Math.max(...data.map(d => d.val), 60);
+    // 2. Helper: Get the last 7 days as Date objects
+    const getLast7Days = () => {
+        const days = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            days.push(d);
+        }
+        return days;
+    };
+
+    // 3. Process Data for the Chart (Uploads per day)
+    const chartData = getLast7Days().map(date => {
+        // Create a comparable date string (YYYY-MM-DD) to match database timestamps
+        const dateStr = date.toISOString().split('T')[0];
+        
+        // Count notes uploaded on this specific date
+        const count = notes.filter(n => {
+            if (!n.createdAt) return false;
+            return n.createdAt.split('T')[0] === dateStr;
+        }).length;
+
+        return {
+            label: date.toLocaleDateString('en-US', { weekday: 'short' }), // "Mon", "Tue"
+            val: count,
+            fullDate: date.toLocaleDateString()
+        };
+    });
+
+    // 4. Dynamic Scale: Find the highest value to set the bar height relative to max
+    // If max is 0 (no uploads), default to 5 so bars don't break
+    const maxVal = Math.max(...chartData.map(d => d.val));
+    const scaleMax = maxVal === 0 ? 5 : maxVal;
 
     return (
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm h-full flex flex-col">
@@ -57,40 +80,51 @@ const ImpactAnalytics = ({ notes = [] }) => {
             <div className="flex justify-between items-start mb-6">
                 <div>
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
-                        <BarChart3 className="w-5 h-5 mr-2 text-blue-500" /> Weekly Activity
+                        <BarChart3 className="w-5 h-5 mr-2 text-blue-500" /> Weekly Uploads
                     </h3>
                     <div className="flex items-baseline gap-2 mt-1">
                         <span className="text-3xl font-black text-gray-900 dark:text-white">{totalViews}</span>
-                        <span className="text-sm text-gray-500 font-medium">total views</span>
+                        <span className="text-sm text-gray-500 font-medium">total lifetime views</span>
                     </div>
                 </div>
                  <div className="flex items-center text-green-500 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-lg text-xs font-bold">
-                    <ArrowRight className="w-3 h-3 mr-1 -rotate-45" /> +24%
+                    <ArrowRight className="w-3 h-3 mr-1 -rotate-45" /> Live
                 </div>
             </div>
 
             {/* Bar Chart Container */}
             <div className="flex-grow flex items-end justify-between gap-2 md:gap-4 mt-2 h-40">
-                {data.map((item, i) => {
-                    const heightPercentage = (item.val / max) * 100;
+                {chartData.map((item, i) => {
+                    // Calculate height percentage relative to the busiest day
+                    const heightPercentage = (item.val / scaleMax) * 100;
+                    
+                    // Determine if this bar represents Today (last item)
+                    const isToday = i === 6;
+
                     return (
                         <div key={i} className="flex flex-col items-center flex-1 group relative h-full justify-end">
                             {/* Tooltip */}
                             <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-xs py-1 px-2 rounded pointer-events-none whitespace-nowrap z-10 shadow-lg">
-                                {item.val} Views
+                                {item.val} Uploads on {item.label}
                             </div>
                             
                             {/* Bar Track */}
                             <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-lg relative overflow-hidden h-full flex items-end">
                                 {/* The Bar */}
                                 <div 
-                                    className="w-full bg-blue-500 dark:bg-blue-600 rounded-lg transition-all duration-700 ease-out group-hover:bg-blue-400 dark:group-hover:bg-blue-500 hover:shadow-[0_0_15px_rgba(59,130,246,0.5)]"
-                                    style={{ height: `${heightPercentage}%` }}
+                                    className={`w-full rounded-lg transition-all duration-700 ease-out group-hover:shadow-[0_0_15px_rgba(59,130,246,0.5)] 
+                                        ${isToday 
+                                            ? 'bg-gradient-to-t from-indigo-500 to-purple-500' 
+                                            : 'bg-blue-500 dark:bg-blue-600 group-hover:bg-blue-400'
+                                        }`}
+                                    style={{ height: `${Math.max(heightPercentage, 5)}%` }} // Min 5% height so 0 isn't invisible
                                 ></div>
                             </div>
                             
                             {/* Label */}
-                            <span className="text-[10px] uppercase font-bold text-gray-400 mt-3">{item.label}</span>
+                            <span className={`text-[10px] uppercase font-bold mt-3 ${isToday ? 'text-indigo-500' : 'text-gray-400'}`}>
+                                {item.label}
+                            </span>
                         </div>
                     )
                 })}
@@ -99,25 +133,94 @@ const ImpactAnalytics = ({ notes = [] }) => {
     );
 };
 
-// --- BADGES STRIP ---
-const BadgeStrip = () => {
-    const badges = [
-        { icon: Star, color: "text-yellow-400", label: "First Login", desc: "Joined the platform" },
-        { icon: Upload, color: "text-blue-400", label: "Contributor", desc: "Uploaded 1st note" },
-        { icon: Eye, color: "text-green-400", label: "Visionary", desc: "100+ Views" },
-        { icon: Medal, color: "text-purple-400", label: "Top Rated", desc: "5-Star Rating" },
+// --- DYNAMIC BADGE STRIP ---
+const BadgeStrip = ({ user, notes = [] }) => {
+    // 1. Calculate Live Stats
+    const uploadCount = notes.length;
+    const totalViews = notes.reduce((acc, n) => acc + (n.downloads || 0), 0);
+    const joinDate = new Date(user.createdAt);
+    const daysSinceJoined = Math.floor((new Date() - joinDate) / (1000 * 60 * 60 * 24));
+
+    // 2. Define Badge Rules
+    const BADGES_CONFIG = [
+        { 
+            id: 'newbie', 
+            icon: Star, 
+            label: "Explorer", 
+            desc: "Joined the platform", 
+            color: "text-yellow-400", 
+            condition: () => true // Always unlocked
+        },
+        { 
+            id: 'contributor', 
+            icon: Upload, 
+            label: "Contributor", 
+            desc: "Uploaded 1st note", 
+            color: "text-blue-400", 
+            condition: () => uploadCount >= 1 
+        },
+        { 
+            id: 'expert', 
+            icon: BookOpen, 
+            label: "Scholar", 
+            desc: "Uploaded 5+ notes", 
+            color: "text-indigo-400", 
+            condition: () => uploadCount >= 5 
+        },
+        { 
+            id: 'visionary', 
+            icon: Eye, 
+            label: "Visionary", 
+            desc: "100+ Total Views", 
+            color: "text-green-400", 
+            condition: () => totalViews >= 100 
+        },
+        { 
+            id: 'influencer', 
+            icon: Flame, 
+            label: "Influencer", 
+            desc: "500+ Total Views", 
+            color: "text-orange-500", 
+            condition: () => totalViews >= 500 
+        },
+        { 
+            id: 'veteran', 
+            icon: Medal, 
+            label: "Veteran", 
+            desc: "Member for 30 days", 
+            color: "text-purple-400", 
+            condition: () => daysSinceJoined >= 30 
+        }
     ];
+
     return (
         <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-            {badges.map((b, i) => (
-                <div key={i} className="flex flex-col items-center min-w-[100px] p-4 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group">
-                    <div className={`p-3 rounded-full bg-gray-50 dark:bg-slate-800 mb-3 group-hover:scale-110 transition-transform shadow-inner`}>
-                        <b.icon className={`w-6 h-6 ${b.color}`} />
+            {BADGES_CONFIG.map((b) => {
+                const isUnlocked = b.condition();
+                
+                return (
+                    <div key={b.id} className={`flex flex-col items-center min-w-[100px] p-4 rounded-xl border shadow-sm transition-all duration-300
+                        ${isUnlocked 
+                            ? 'bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800 hover:border-blue-300 hover:shadow-md cursor-pointer group' 
+                            : 'bg-gray-100 dark:bg-slate-900/50 border-transparent opacity-50 grayscale'
+                        }`}
+                    >
+                        <div className={`p-3 rounded-full mb-3 transition-transform shadow-inner
+                            ${isUnlocked 
+                                ? 'bg-gray-50 dark:bg-slate-800 group-hover:scale-110' 
+                                : 'bg-gray-200 dark:bg-slate-800'
+                            }`}>
+                            <b.icon className={`w-6 h-6 ${isUnlocked ? b.color : 'text-gray-400'}`} />
+                        </div>
+                        <span className={`text-xs font-bold text-center ${isUnlocked ? 'text-gray-800 dark:text-white' : 'text-gray-500'}`}>
+                            {b.label}
+                        </span>
+                        <span className="text-[10px] text-gray-400 text-center mt-1">
+                            {isUnlocked ? b.desc : <span className="flex items-center justify-center"><Lock className="w-3 h-3 mr-1"/> Locked</span>}
+                        </span>
                     </div>
-                    <span className="text-xs font-bold text-gray-800 dark:text-white text-center">{b.label}</span>
-                    <span className="text-[10px] text-gray-400 text-center mt-1">{b.desc}</span>
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 };
@@ -713,6 +816,8 @@ const DashboardPage = () => {
             case 'notesUsed': return <DashboardNotesUsed onNoteView={handleNoteView} />;
             case 'topContributors': return <TopContributors />;
             case 'resetPassword': return <DashboardResetPassword />;
+            // ... inside DashboardPage component, inside renderContent switch statement ...
+
             case 'main':
             default:
                 return (
@@ -726,7 +831,7 @@ const DashboardPage = () => {
                             <div className="lg:col-span-8 h-full">
                                 <ImpactAnalytics notes={userNotes} />
                             </div>
-                            {/* Right: NEW DYNAMIC QUEST WIDGET */}
+                            {/* Right: DYNAMIC QUEST WIDGET */}
                             <div className="lg:col-span-4 h-full">
                                 <QuestWidget />
                             </div>
@@ -736,9 +841,13 @@ const DashboardPage = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                             <div className="lg:col-span-8">
                                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 mb-3">Achievements</h3>
-                                <BadgeStrip />
+                                
+                                {/* --- UPDATED LINE BELOW --- */}
+                                <BadgeStrip user={user} notes={userNotes} /> 
+                                
                             </div>
                             <div className="lg:col-span-4">
+                                {/* ... Quick Actions code remains same ... */}
                                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 mb-3">Quick Actions</h3>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button onClick={handleUploadClick} className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-xl font-bold text-sm hover:scale-105 transition-transform flex items-center justify-center border border-blue-100 dark:border-blue-800">
