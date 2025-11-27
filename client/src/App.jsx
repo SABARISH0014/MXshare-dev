@@ -14,7 +14,7 @@ import HomePage from './pages/HomePage';
 import AuthForm from './pages/AuthPage'; 
 import UserDashboard from './pages/Dashboard';
 import NoteDetailPage from './pages/NoteDetailPage'; 
-
+import AdminPage from './pages/AdminPage';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 // --- Google Auth Callback ---
@@ -240,6 +240,9 @@ const App = () => {
         <Route path="/signup" element={<AuthForm type="Signup" onNavigate={onNavigate} onAuthSuccess={onAuthSuccess} />} />
         <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
         
+        {/* Admin Route (Handles its own protection) */}
+        <Route path="/admin" element={<AdminPage />} />
+
         <Route path="/dashboard" element={
             <ProtectedRoute>
               <UserDashboard
@@ -269,6 +272,7 @@ const App = () => {
     </AuthContext.Provider>
   );
 };
+
 
 const AppWrapper = () => (
   <GoogleOAuthProvider 

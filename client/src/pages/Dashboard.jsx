@@ -16,13 +16,14 @@ import {
 import ThemeToggle from '../components/ThemeToggle';
 import { Button, Input, Select, Card, CardContent } from '../components/ui/primitives';
 import { API_BASE_URL, syllabusData } from '../data/constants';
-// Let Vite resolve the extension automatically
-// ✅ CORRECT
 import { AuthContext } from '../context/AuthContext';
 import { ToastContext } from '../context/ToastContext';
 import FileUploadCard from '../components/FileUploadCard';
 import TopContributors from '../components/TopContributors';
 import NoteCard from '../components/NoteCard';
+
+// --- NEW WIDGET IMPORT ---
+import QuestWidget from '../components/QuestWidget';
 
 // Icon Mapping
 const LucideIcons = { 
@@ -34,7 +35,7 @@ const LucideIcons = {
 // 1. VISUAL & GAMIFICATION SUB-COMPONENTS
 // ==================================================================================
 
-// --- NEW: MODERN BAR CHART (Visually Pleasing Replacement) ---
+// --- IMPACT ANALYTICS CHART ---
 const ImpactAnalytics = ({ notes = [] }) => {
     const totalViews = notes.reduce((acc, n) => acc + (n.downloads || 0), 0);
     
@@ -98,37 +99,6 @@ const ImpactAnalytics = ({ notes = [] }) => {
     );
 };
 
-// --- DAILY QUESTS CARD ---
-const DailyQuests = () => {
-    const quests = [
-        { label: "Upload 1 Note", xp: 50, done: true },
-        { label: "Read 3 Notes", xp: 30, done: false },
-        { label: "Share Profile", xp: 20, done: false },
-    ];
-
-    return (
-        <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg h-full flex flex-col justify-center">
-            <div className="flex items-center justify-between mb-6">
-                <h3 className="font-bold text-lg flex items-center"><Target className="w-5 h-5 mr-2"/> Daily Quests</h3>
-                <span className="text-xs bg-white/20 px-2 py-1 rounded font-medium">Resets in 4h</span>
-            </div>
-            <div className="space-y-3">
-                {quests.map((q, i) => (
-                    <div key={i} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${q.done ? 'bg-white/20 border-transparent' : 'bg-transparent border-white/20 hover:bg-white/10'}`}>
-                        <div className="flex items-center">
-                            <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center ${q.done ? 'bg-green-400 border-green-400' : 'border-white/50'}`}>
-                                {q.done && <Check className="w-3 h-3 text-black" />}
-                            </div>
-                            <span className={`text-sm font-medium ${q.done ? 'line-through opacity-70' : ''}`}>{q.label}</span>
-                        </div>
-                        <span className="text-xs font-bold text-yellow-300">+{q.xp} XP</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
 // --- BADGES STRIP ---
 const BadgeStrip = () => {
     const badges = [
@@ -158,7 +128,7 @@ const GamifiedHeader = ({ user, notesCount }) => {
     const currentXP = (notesCount % 5) * 20;
     const nextLevelXP = 100;
     const progress = (currentXP / nextLevelXP) * 100;
-    const streak = 3; 
+    const streak = user?.dailyQuestProgress?.streak || 0; // Updated to pull from user obj if available
 
     return (
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-gray-200 dark:border-slate-800 shadow-sm mb-8 relative overflow-hidden">
@@ -691,7 +661,6 @@ const DashboardPage = () => {
     const [userNotes, setUserNotes] = useState([]);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-    const authContext = useContext(AuthContext);
     const { user, logout, setUser } = useContext(AuthContext);
     const { addToast } = useContext(ToastContext);
     const navigate = useNavigate();
@@ -707,33 +676,20 @@ const DashboardPage = () => {
     }, [user, refreshTrigger]);
 
     const handleLogout = () => {
-    // Safety Check: Does the logout function exist?
-    if (typeof logout === 'function') {
-        // The context handles the cleanup (see Step 1 above)
-        logout();
-        addToast('Logged out successfully', 'success');
-    } else {
-        // Fallback if Context is broken: Manually clear EVERYTHING
-        console.warn("Logout function not found. Manually scrubbing storage.");
-        
-        // List of all keys to remove
-        const keysToRemove = [
-            'userToken', 
-            'authToken', 
-            'refreshToken', 
-            'userData', 
-            'googleAccessToken', 
-            'googleRefreshToken'
-        ];
-
-        keysToRemove.forEach(key => localStorage.removeItem(key));
-
-        window.location.href = '/login'; // Force reload to clear state
-        return;
-    }
-
-    navigate('/login');
-};
+        if (typeof logout === 'function') {
+            logout();
+            addToast('Logged out successfully', 'success');
+        } else {
+            console.warn("Logout function not found. Manually scrubbing storage.");
+            const keysToRemove = [
+                'userToken', 'authToken', 'refreshToken', 'userData', 'googleAccessToken', 'googleRefreshToken'
+            ];
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            window.location.href = '/login'; 
+            return;
+        }
+        navigate('/login');
+    };
 
     const handleNoteView = (note) => navigate(`/note/${note._id}`);
     const handleUploadClick = () => {
@@ -766,13 +722,13 @@ const DashboardPage = () => {
 
                         {/* 2. Top Stats Grid (Graph + Quests) */}
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-auto">
-                            {/* Left: Bar Graph (Updated) */}
+                            {/* Left: Bar Graph */}
                             <div className="lg:col-span-8 h-full">
                                 <ImpactAnalytics notes={userNotes} />
                             </div>
-                            {/* Right: Daily Quests */}
+                            {/* Right: NEW DYNAMIC QUEST WIDGET */}
                             <div className="lg:col-span-4 h-full">
-                                <DailyQuests />
+                                <QuestWidget />
                             </div>
                         </div>
 
@@ -796,9 +752,9 @@ const DashboardPage = () => {
                         </div>
 
                         {/* 4. Upload & Search */}
-                         <div ref={uploaderRef} className="scroll-mt-24 pt-4">
+                        <div ref={uploaderRef} className="scroll-mt-24 pt-4">
                             <FileUploadCard onFileUploadSuccess={() => setRefreshTrigger(p => p+1)} />
-                         </div>
+                        </div>
                         <div className="border-t border-gray-200 dark:border-slate-800 pt-8">
                              <DashboardSearchSection onNoteView={handleNoteView} triggerRefresh={refreshTrigger} />
                         </div>
