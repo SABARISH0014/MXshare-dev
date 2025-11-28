@@ -1,6 +1,6 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { flushSync } from "react-dom";
-import { PlayCircle, Cloud, X, Loader2, Send, CheckCircle } from 'lucide-react';
+import { PlayCircle, Cloud, X, Loader2, Send, CheckCircle, Sparkles } from 'lucide-react'; // Added Sparkles
 import axios from 'axios';
 import { Button, Input, Select } from './ui/primitives';
 import { ToastContext } from '../context/ToastContext';
@@ -29,7 +29,6 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
   // =============================
   const linkDriveAccount = useGoogleLogin({
     flow: 'auth-code',
-    // Ensure scope allows file management (drive.file is usually sufficient for files created by the app)
     scope: "openid profile email https://www.googleapis.com/auth/drive.file",
     onSuccess: async (codeResponse) => {
       try {
@@ -106,15 +105,13 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
   };
 
   // =============================
-  // 🛑 UPDATED: CLEANUP FUNCTION
+  // CLEANUP FUNCTION
   // =============================
   const handleFormCancel = async () => {
-    // If we have a file ID and a valid Google Token, ask Backend to delete it
     if (driveFile && driveFile.fileId && googleAccessToken) {
       try {
         addToast("Removing uploaded file...", "info");
         
-        // Call YOUR backend, not Google directly
         await axios.post(`${API_BASE_URL}/api/notes/drive-cleanup`, {
             fileId: driveFile.fileId,
             googleToken: googleAccessToken
@@ -125,11 +122,8 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
         addToast("File removed from Drive.", "success");
       } catch (error) {
         console.error("Cleanup failed:", error);
-        // Fail silently so the user isn't stuck
       }
     }
-    
-    // Reset the UI
     resetAll();
   };
 
@@ -223,7 +217,8 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
       }
 
       if (res?.data) {
-        addToast("Uploaded successfully!", "success");
+        // Updated Toast to mention AI
+        addToast("Uploaded! AI is analyzing content in background...", "success");
         onFileUploadSuccess?.(res.data.note);
         resetAll();
       }
@@ -305,11 +300,19 @@ const FileUploadCard = ({ onFileUploadSuccess }) => {
       <div className="flex justify-between items-center mb-5 border-b border-gray-200 dark:border-slate-700 pb-4">
         <h3 className="text-xl font-bold text-gray-900 dark:text-white">Finalize Details</h3>
 
-        {/* ✅ UPDATED: Use handleFormCancel instead of resetAll */}
         <Button variant="ghost" onClick={handleFormCancel}>
           <X className="w-4 h-4 mr-1" /> Cancel
         </Button>
       </div>
+
+      {/* --- NEW AI BANNER START --- */}
+      <div className="mb-6 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-3 rounded-lg flex items-center gap-3">
+        <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+        <div className="text-xs text-indigo-800 dark:text-indigo-200">
+          <strong>AI Powered:</strong> Content will be scanned for moderation, summarized, and indexed for semantic search automatically after upload.
+        </div>
+      </div>
+      {/* --- NEW AI BANNER END --- */}
 
       {/* Preview */}
       <div className="mb-6 bg-gray-50 dark:bg-slate-800 dim:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-700 dim:border-slate-600 p-4 flex flex-col items-center transition-colors">

@@ -4,14 +4,16 @@ import * as aiController from '../controllers/aiController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/' }); // Temporary storage for on-demand analysis
+const upload = multer({ dest: 'uploads/' });
 
-// POST /api/ai/suggest-titles
-// Used by the Frontend Upload Form
-router.post('/suggest-titles', 
+// Auto-fill title/tags from file
+router.post('/suggest-metadata', 
     authenticateJWT, 
     upload.single('file'), 
-    aiController.suggestTitlesOnDemand
+    aiController.suggestMetadata
 );
+
+// Quick text check (for comments or bio)
+router.get('/moderate', authenticateJWT, aiController.moderateText);
 
 export default router;

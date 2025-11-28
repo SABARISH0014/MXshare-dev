@@ -1,14 +1,22 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
-
-import { Note } from '../models/Note.js'; 
+import fs from 'fs';
+import { driveClient } from '../utils/robotDrive.js'; 
+import { Note } from '../models/Note.js';
 import { NoteChunk } from '../models/NoteChunk.js';
-import { ModerationLog } from '../models/ModerationLog.js';
 import * as AIService from './AIService.js';
-import { driveClient } from '../utils/robotDrive.js';
 
-// Helper for stream conversion
+// --- Helper: Chunk Text ---
+function chunkText(text, size = 800, overlap = 100) {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += (size - overlap)) {
+    chunks.push(text.substring(i, i + size));
+  }
+  return chunks;
+}
+
+// --- Helper: Stream to Buffer ---
 async function streamToBuffer(stream) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -18,90 +26,121 @@ async function streamToBuffer(stream) {
   });
 }
 
-// Helper: Extract Full Text
-async function extractContent(note) {
-  if (note.fileType === 'pdf') {
-    const stream = await driveClient.getFileStream(note.driveFileId);
-    const buffer = await streamToBuffer(stream);
-    const data = await pdfParse(buffer);
-    return data.text; 
-  } 
-  return ""; 
+// --- Helper: Extract Text ---
+export async function extractText(note) {
+  try {
+    let fullText = "";
+    
+    if (note.fileType === 'pdf' && note.driveFileId) {
+      const stream = await driveClient.getFileStream(note.driveFileId);
+      const buffer = await streamToBuffer(stream);
+      const data = await pdfParse(buffer);
+      fullText = data.text;
+    } else if (note.description) {
+      fullText = note.description; // Fallback
+    } else if (note.title) {
+      fullText = note.title; // Minimum fallback
+    }
+    
+    return fullText.replace(/\s+/g, ' ').trim();
+  } catch (err) {
+    console.error(`Extraction failed for note ${note._id}:`, err);
+    return "";
+  }
 }
 
-/**
- * ORCHESTRATOR: Manages the distinct AI workflows
- */
-export async function processNoteQueue(noteId) {
-  console.log(`[Processor] 🚀 Processing Note: ${noteId}`);
-  
+// --- Main Processing Workflow ---
+export async function processNoteContent(noteId) {
+  console.log(`[AI] Processing Note: ${noteId}`);
+  const note = await Note.findById(noteId);
+  if (!note) return;
+
   try {
-    const note = await Note.findById(noteId);
-    if (!note) return;
-
-    // 1. EXTRACT TEXT
-    let fullText = await extractContent(note);
-
-    // 2. VISION CHECK (If Image/Video) - Uses Gemini 2.5 Pro
-    if (note.fileType === 'image' || note.fileType === 'video_link') {
-       // ... fetch image buffer ...
-       // const visionRes = await AIService.analyzeImage(base64);
-       // if (!visionRes.isSafe) { ... block ... return; }
-    }
-
-    if (!fullText) {
-      console.log("No text extracted.");
+    // 1. Extract Text
+    const rawText = await extractText(note);
+    if (!rawText || rawText.length < 50) {
+      console.log(`[AI] Insufficient text for Note ${noteId}`);
       return;
     }
 
-    // 3. EXECUTE INDIVIDUAL PROCESSES
-    // We run them in parallel for efficiency, but they are separate calls
-    console.log("[Processor] 🧠 Calling AI Models (Summary & Moderation)...");
-    
-    const [moderationRes, summaryRes] = await Promise.all([
-        AIService.moderateContent(fullText), // Flash (Safety)
-        AIService.generateSummary(fullText)  // Pro (For Preview Page)
-    ]);
-
-    // 4. SAVE METADATA
-    
-    // Save Safety Log
-    await ModerationLog.create({
-      noteId: note._id,
-      overall: moderationRes.overall,
-      categories: moderationRes.categories
-    });
-
-    // Save Summary for Preview Page
-    note.aiSummary = summaryRes; 
-    note.moderationStatus = moderationRes.overall.label;
-    note.fullTextContent = fullText; 
-    await note.save();
-
-    console.log(`[Processor] ✅ Metadata Saved. Summary available for Preview.`);
-
-    // 5. GENERATE EMBEDDINGS (For Search)
-    // Only if content is Safe
-    if (note.moderationStatus !== 'blocked') {
-      console.log("[Processor] 🔢 Generating Embeddings (text-embedding-004)...");
-      
-      const chunks = fullText.match(/.{1,1000}/g) || []; // 1000 chars per chunk
-      
-      for (let i = 0; i < chunks.length; i++) {
-        const vector = await AIService.generateEmbedding(chunks[i]);
-        if (vector) {
-          await NoteChunk.create({
-            noteId: note._id,
-            chunkText: chunks[i],
-            embedding: vector, 
-            chunkIndex: i
-          });
-        }
-      }
-      console.log(`[Processor] ✅ Vectors Created for Search.`);
+    // 2. Moderation Check
+    const modResult = await AIService.moderate(rawText);
+    if (!modResult.isSafe) {
+      console.log(`[AI] Content Blocked for Note ${noteId}`);
+      note.moderationStatus = 'blocked';
+      await note.save();
+      return; 
     }
 
+    // 3. Generate Summary
+    const summary = await AIService.summarize({ content: rawText, type: note.fileType });
+    note.aiSummary = summary;
+    note.moderationStatus = 'safe'; 
+    await note.save();
+
+    // 4. Generate Embeddings for Search
+    await NoteChunk.deleteMany({ noteId: note._id });
+
+    const textChunks = chunkText(rawText);
+    let vectorCount = 0;
+
+    for (let i = 0; i < Math.min(textChunks.length, 20); i++) { 
+      const embedding = await AIService.embedText(textChunks[i]);
+      if (embedding) {
+        await NoteChunk.create({
+          noteId: note._id,
+          chunkText: textChunks[i],
+          embedding,
+          chunkIndex: i
+        });
+        vectorCount++;
+      }
+    }
+    console.log(`[AI] Note ${noteId} processed. ${vectorCount} vectors created.`);
+
   } catch (error) {
-    console.error(`[Processor] ❌ Error:`, error);
+    console.error(`[AI] Processing Failed for ${noteId}:`, error);
   }
 }
+
+// --- Semantic Search Logic ---
+export async function semanticSearch(query) {
+  const queryVector = await AIService.embedText(query);
+  if (!queryVector) return [];
+
+  const results = await NoteChunk.aggregate([
+    {
+      "$vectorSearch": {
+        "index": "vector_index", 
+        "path": "embedding",
+        "queryVector": queryVector,
+        "numCandidates": 50,
+        "limit": 10
+      }
+    },
+    {
+      "$lookup": {
+        "from": "notes",
+        "localField": "noteId",
+        "foreignField": "_id",
+        "as": "note"
+      }
+    },
+    { "$unwind": "$note" },
+    { "$match": { "note.moderationStatus": "safe" } },
+    {
+      "$project": {
+        "_id": 0,
+        "note": 1,
+        "score": { "$meta": "vectorSearchScore" },
+        "snippet": "$chunkText"
+      }
+    }
+  ]);
+
+  return results;
+}
+
+// --- CRITICAL FIX: EXPORT ALIAS ---
+// This allows 'noteController.js' to find 'processNoteQueue'
+export const processNoteQueue = processNoteContent;

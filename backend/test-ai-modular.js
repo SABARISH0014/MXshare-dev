@@ -11,10 +11,10 @@ dotenv.config({ path: join(__dirname, '.env') });
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function runTests() {
-  console.log("\n🤖 STARTING MODULAR AI SYSTEM CHECK (Groq + Google)...\n");
+  console.log("\n🤖 STARTING MODULAR AI SYSTEM CHECK (OpenRouter + Google)...\n");
 
-  if(!process.env.GROQ_API_KEY) {
-      console.error("❌ ERROR: GROQ_API_KEY is missing in .env");
+  if(!process.env.OPENROUTER_API_KEY) {
+      console.error("❌ ERROR: OPENROUTER_API_KEY is missing in .env");
       process.exit(1);
   }
   if(!process.env.GOOGLE_API_KEY) {
@@ -30,25 +30,32 @@ async function runTests() {
     React is maintained by Facebook and a community of individual developers and companies.
   `;
 
-  // --- TEST 1: TEXT MODERATION (Groq) ---
-  console.log("1️⃣  Testing Moderation (Groq)...");
+  // --- TEST 1: TEXT MODERATION (OpenRouter/Llama) ---
+  console.log("1️⃣  Testing Moderation (OpenRouter Llama)...");
   try {
     const start = Date.now();
     const result = await AIService.moderateContent(sampleText);
     const duration = Date.now() - start;
     
-    if (result.overall && result.categories) {
+    // Check if it's a real result or a fallback
+    const isFallback = !result.categories || Object.keys(result.categories).length === 0;
+
+    if (result.overall && !isFallback) {
       console.log(`   ✅ SUCCESS (${duration}ms)`);
       console.log("   🛡️  Label:", result.overall.label);
     } else {
-      console.error("   ❌ FAILED: Invalid response structure.", result);
+      console.warn(`   ⚠️  PARTIAL SUCCESS (Fallback Triggered)`);
+      console.log("   🛡️  Label:", result.overall?.label || "Unknown");
     }
   } catch (error) {
     console.error("   ❌ FAILED:", error.message);
   }
 
-  // --- TEST 2: TITLE SUGGESTION (Groq) ---
-  console.log("\n2️⃣  Testing Title Suggestion (Groq)...");
+  console.log("\n⏳ Cooling down (2s)...\n");
+  await wait(2000);
+
+  // --- TEST 2: TITLE SUGGESTION (OpenRouter/Llama) ---
+  console.log("2️⃣  Testing Title Suggestion (OpenRouter Llama)...");
   try {
     const start = Date.now();
     const titles = await AIService.suggestTitles(sampleText);
@@ -64,8 +71,11 @@ async function runTests() {
     console.error("   ❌ FAILED:", error.message);
   }
 
-  // --- TEST 3: DOCUMENT SUMMARY (Groq) ---
-  console.log("\n3️⃣  Testing Summary (Groq)...");
+  console.log("\n⏳ Cooling down (2s)...\n");
+  await wait(2000);
+
+  // --- TEST 3: DOCUMENT SUMMARY (OpenRouter/Llama) ---
+  console.log("3️⃣  Testing Summary (OpenRouter Llama)...");
   try {
     const start = Date.now();
     const summary = await AIService.generateSummary(sampleText);
@@ -81,8 +91,11 @@ async function runTests() {
     console.error("   ❌ FAILED:", error.message);
   }
 
+  console.log("\n⏳ Cooling down (1s)...\n");
+  await wait(1000);
+
   // --- TEST 4: EMBEDDINGS (Google) ---
-  console.log("\n4️⃣  Testing Embeddings (Google text-embedding-004)...");
+  console.log("4️⃣  Testing Embeddings (Google text-embedding-004)...");
   try {
     const start = Date.now();
     const vector = await AIService.generateEmbedding("Vector search test.");

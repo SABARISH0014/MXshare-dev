@@ -40,6 +40,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(COOKIE_SECRET));
+app.use('/api/ai', aiRoutes);
 
 // --- Socket.IO ---
 const io = new SocketIoServer(server, {

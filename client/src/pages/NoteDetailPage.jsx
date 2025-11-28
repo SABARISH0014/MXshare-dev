@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
     Download, User, Calendar, Star, MessageSquare, 
-    ArrowLeft, FileText, Eye, Lock, Loader2
+    ArrowLeft, FileText, Eye, Lock, Loader2, Sparkles // Added Sparkles
 } from 'lucide-react';
 import axios from 'axios';
 import ThemeToggle from '../components/ThemeToggle';
@@ -234,6 +234,23 @@ const NoteDetailPage = () => {
                     <span className="flex items-center bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-900/30 px-3 py-1 rounded-full"><Star className="w-4 h-4 mr-2 fill-yellow-500 text-yellow-500"/> {note.avgRating?.toFixed(1) || 0} ({note.reviewCount || 0})</span>
                     <span className="flex items-center bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/30 px-3 py-1 rounded-full"><Download className="w-4 h-4 mr-2"/> {note.downloads || 0}</span>
                 </div>
+
+                {/* --- AI SUMMARY SECTION --- */}
+                {note.aiSummary && (
+                  <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800 rounded-xl p-6 mb-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2 mb-3">
+                      <Sparkles className="w-4 h-4" /> AI Generated Summary
+                    </h3>
+                    <p className="text-gray-700 dark:text-indigo-100 leading-relaxed text-sm">
+                      {note.aiSummary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Description */}
+                <p className="text-gray-600 dark:text-slate-300 mb-6 leading-relaxed">
+                  {note.description || "No manual description provided."}
+                </p>
 
                 <div className="flex flex-wrap gap-2">
                     {note.tags && note.tags.map((tag, index) => (

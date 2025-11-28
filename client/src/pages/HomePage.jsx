@@ -7,7 +7,7 @@ import {
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios'; // 1. Import Axios
+import axios from 'axios'; 
 
 // Import your custom components and data
 import { Button } from '../components/ui/primitives';
@@ -16,7 +16,8 @@ import ThemeToggle from '../components/ThemeToggle';
 import TopContributors from '../components/TopContributors'; 
 import { ToastContext } from '../context/ToastContext';
 import { AuthContext } from '../context/AuthContext';
-import { API_BASE_URL } from '../data/constants'; // 2. Import API URL
+import { API_BASE_URL } from '../data/constants';
+import { searchNotesSemantic } from '../utils/api'; // Import AI Search function
 
 // --- ANIMATION COMPONENTS ---
 const HeroAnimation = () => (
@@ -36,12 +37,13 @@ const HomePage = ({ onNavigate }) => {
   
   // --- STATE ---
   const [searchQuery, setSearchQuery] = useState('');
-  const [allNotes, setAllNotes] = useState([]); // 3. Initialize as empty array
+  const [allNotes, setAllNotes] = useState([]); 
   const [topNotes, setTopNotes] = useState([]); 
   const [latestNotes, setLatestNotes] = useState([]); 
   const [topContributors, setTopContributors] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(true); // 4. Add loading state
+  const [loading, setLoading] = useState(true);
+  const [useAI, setUseAI] = useState(false); // NEW STATE FOR AI TOGGLE
   
   const titleRef = useRef(null); 
 
@@ -68,7 +70,6 @@ const HomePage = ({ onNavigate }) => {
   useEffect(() => {
     if (allNotes && allNotes.length > 0) {
       // 1. Sort Top Rated (High Rating -> Low Rating)
-      // Using avgRating from backend, fallback to 0
       const sortedByRating = [...allNotes].sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0));
       setTopNotes(sortedByRating.slice(0, 3));
 
@@ -79,7 +80,6 @@ const HomePage = ({ onNavigate }) => {
       // 3. Calculate Top Contributors
       const contributorMap = {};
       allNotes.forEach(note => {
-        // Handle case where uploader might be populated object or just ID
         const contributorName = note.uploader?.name || "Unknown User";
         
         if (!contributorMap[contributorName]) {
@@ -103,15 +103,13 @@ const HomePage = ({ onNavigate }) => {
 
   // --- LOGIC: HANDLE NOTE CLICK ---
   const handleViewNote = (note) => {
-  if (user) {
-      // Pass { from: '/' } so NoteDetail knows to come back here if we want
-      // But based on your request, sticking to Dashboard is safer.
-      navigate(`/note/${note._id}`, { state: { from: '/' } }); 
-  } else {
-      addToast("Please login to view note details", "info");
-      navigate('/login', { state: { from: `/note/${note._id}` } });
-  }
-};
+    if (user) {
+        navigate(`/note/${note._id}`, { state: { from: '/' } }); 
+    } else {
+        addToast("Please login to view note details", "info");
+        navigate('/login', { state: { from: `/note/${note._id}` } });
+    }
+  };
 
   // --- CATEGORIES CONFIG ---
   const categories = [
@@ -123,20 +121,44 @@ const HomePage = ({ onNavigate }) => {
     { name: 'Design', icon: <Palette className="w-5 h-5" /> },
   ];
 
-  // --- SEARCH LOGIC ---
+  // --- UPDATED SEARCH LOGIC (AI + Standard) ---
   useEffect(() => {
-    if (searchQuery === '') {
-      setSearchResults([]);
-    } else {
-      const lowerCaseQuery = searchQuery.toLowerCase();
-      const results = allNotes.filter(note => 
-        note.title?.toLowerCase().includes(lowerCaseQuery) ||
-        note.subject?.toLowerCase().includes(lowerCaseQuery) ||
-        note.uploader?.name?.toLowerCase().includes(lowerCaseQuery)
-      );
-      setSearchResults(results);
-    }
-  }, [searchQuery, allNotes]);
+    const runSearch = async () => {
+      // If query is empty, clear results and stop
+      if (searchQuery === '') {
+        setSearchResults([]);
+        return;
+      }
+
+      setLoading(true);
+
+      if (useAI) {
+        // 1. AI SEMANTIC SEARCH
+        try {
+          // This calls the new API endpoint which uses Vector Search
+          const results = await searchNotesSemantic(searchQuery);
+          setSearchResults(results);
+        } catch (e) {
+          console.error("Semantic search failed", e);
+          addToast("AI Search failed, try standard search.", "error");
+        }
+      } else {
+        // 2. STANDARD KEYWORD SEARCH (Client-side filtering)
+        const lowerCaseQuery = searchQuery.toLowerCase();
+        const results = allNotes.filter(note => 
+          note.title?.toLowerCase().includes(lowerCaseQuery) ||
+          note.subject?.toLowerCase().includes(lowerCaseQuery) ||
+          note.uploader?.name?.toLowerCase().includes(lowerCaseQuery)
+        );
+        setSearchResults(results);
+      }
+      setLoading(false);
+    };
+
+    // Debounce the search to prevent API spam
+    const timer = setTimeout(runSearch, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, useAI, allNotes, addToast]);
 
   // --- GSAP ANIMATIONS ---
   useEffect(() => {
@@ -228,19 +250,29 @@ const HomePage = ({ onNavigate }) => {
             </Button>
           </div>
 
-          {/* Search Box */}
+          {/* --- SEARCH BOX WITH AI TOGGLE --- */}
           <div className="mt-12 w-full max-w-2xl mx-auto p-4 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-300 dark:border-slate-700 search-teaser transition-colors duration-300">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500 dark:text-slate-400" />
+            <div className="relative flex items-center">
+              <Search className={`absolute left-4 w-5 h-5 ${useAI ? 'text-indigo-500' : 'text-gray-500 dark:text-slate-400'}`} />
+              
               <input
                 type="text"
-                placeholder="Search notes, subjects, or contributors..."
-                className="w-full h-14 pl-12 pr-4 text-lg border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus-visible:ring-blue-500 focus:border-blue-500 transition-colors placeholder:text-gray-500 dark:placeholder:text-slate-500"
+                placeholder={useAI ? "Ask a question (e.g., 'How do I solve differential equations?')..." : "Search notes, subjects, or contributors..."}
+                className="w-full h-14 pl-12 pr-28 text-lg border-none bg-transparent text-gray-900 dark:text-white focus:ring-0 placeholder:text-gray-500 dark:placeholder:text-slate-500"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+
+              {/* AI Toggle Switch */}
+              <div className="absolute right-4 flex items-center gap-2 cursor-pointer" onClick={() => setUseAI(!useAI)}>
+                <span className={`text-xs font-bold transition-colors ${useAI ? 'text-indigo-600' : 'text-gray-400'}`}>AI</span>
+                <div className={`w-10 h-6 rounded-full p-1 transition-colors duration-300 ${useAI ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-600'}`}>
+                    <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${useAI ? 'translate-x-4' : 'translate-x-0'}`} />
+                </div>
+              </div>
             </div>
           </div>
+
         </div>
       </div>
 
@@ -252,7 +284,7 @@ const HomePage = ({ onNavigate }) => {
             {categories.map((cat) => (
                 <button 
                     key={cat.name} 
-                    onClick={() => setSearchQuery(cat.name)} 
+                    onClick={() => { setSearchQuery(cat.name); setUseAI(false); }} // Reset to standard search for categories
                     className="group flex items-center space-x-2 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-full hover:border-blue-500 dark:hover:border-blue-400 hover:shadow-md transition-all duration-200"
                 >
                 <span className="text-gray-500 dark:text-slate-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">{cat.icon}</span>
@@ -275,7 +307,9 @@ const HomePage = ({ onNavigate }) => {
           ) : searchQuery !== '' ? (
             /* --- SEARCH RESULTS --- */
             <div className="mb-16">
-              <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-8">Search Results ({searchResults.length})</h2>
+              <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-8">
+                {useAI ? 'Semantic Results' : 'Search Results'} ({searchResults.length})
+              </h2>
               {searchResults.length > 0 ? (
                 <div className="note-card-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {searchResults.map((note) => (
@@ -288,6 +322,7 @@ const HomePage = ({ onNavigate }) => {
                 <div className="text-center py-20">
                     <Layers className="w-16 h-16 text-gray-300 dark:text-slate-700 mx-auto mb-4" />
                     <p className="text-gray-600 dark:text-slate-400 text-lg">No notes found matching "{searchQuery}".</p>
+                    {useAI && <p className="text-sm text-indigo-500 mt-2">Try rephrasing your question or switching off AI mode.</p>}
                     <Button variant="link" onClick={() => setSearchQuery('')} className="mt-2 text-blue-600">Clear Search</Button>
                 </div>
               )}
@@ -315,7 +350,7 @@ const HomePage = ({ onNavigate }) => {
 
               {/* --- FEATURE: TOP CONTRIBUTORS --- */}
               <div className="mb-24">
-                 <TopContributors contributors={topContributors} />
+                  <TopContributors contributors={topContributors} />
               </div>
 
               {/* --- LATEST NOTES --- */}

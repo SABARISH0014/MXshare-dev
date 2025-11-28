@@ -9,6 +9,7 @@ import { API_BASE_URL, mockNoteList } from './data/constants';
 import './utils/api'; 
 import { AuthContext } from './context/AuthContext';
 import { ToastContext, NotificationProvider } from './context/ToastContext';
+import TestAI from './pages/TestAI';
 
 import HomePage from './pages/HomePage';
 import AuthForm from './pages/AuthPage'; 
@@ -256,7 +257,7 @@ const App = () => {
             </ProtectedRoute>
           } 
         />
-        
+        <Route path="/test-ai" element={<TestAI />} />
         {/* Remove UserDashboard wrapper. NoteDetailPage handles its own layout. */}
 <Route 
   path="/note/:id" 
