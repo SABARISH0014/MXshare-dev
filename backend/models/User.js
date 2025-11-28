@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-// --- Refresh Token Schema (unchanged) ---
+// --- Refresh Token Schema (Kept as is) ---
 const RefreshTokenSchema = new mongoose.Schema({
   tokenHash: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
@@ -8,7 +8,7 @@ const RefreshTokenSchema = new mongoose.Schema({
   replacedByTokenHash: { type: String, default: null } 
 }, { _id: false });
 
-// --- UPDATED: Quest Sub-schema ---
+// --- Quest Sub-schema (Kept as is) ---
 const QuestProgressSchema = new mongoose.Schema({
   questId: { type: String, required: true },
   label: { type: String, required: true },
@@ -18,8 +18,6 @@ const QuestProgressSchema = new mongoose.Schema({
   xpReward: { type: Number, required: true },
   progress: { type: Number, default: 0 },
   completed: { type: Boolean, default: false },
-  
-  // NEW: Tracks when a quest was moved to history
   completedAt: { type: Date } 
 }, { _id: false });
 
@@ -41,30 +39,44 @@ const UserSchema = new mongoose.Schema({
   interests: { type: String, default: '' }, 
   strengths: { type: String, default: '' }, 
   
-  // --- GAMIFICATION ENGINE FIELDS ---
+  // ==================================================
+  // NEW: SECURITY & AI MODERATION FIELDS
+  // ==================================================
+  role: { 
+    type: String, 
+    enum: ['user', 'admin'], 
+    default: 'user' 
+    // 'admin' gets access to /admin/dashboard to review flagged content
+  },
+  
+  trustScore: { 
+    type: Number, 
+    default: 100,
+    min: 0,
+    max: 100
+    // Logic: If AI flags a user's upload as "Blocked" -> Deduct 10 points.
+    // If score < 50, require manual approval for ALL uploads.
+  },
+
+  isBanned: { type: Boolean, default: false }, // "Kill switch" for malicious users
+
+  // ==================================================
+  // GAMIFICATION ENGINE FIELDS
+  // ==================================================
   xp: { type: Number, default: 0 },
   level: { type: Number, default: 1 },
   
   dailyQuestProgress: {
     lastReset: { type: Date, default: Date.now },
-    
-    // The Active Quests (Visible on Dashboard)
     quests: { type: [QuestProgressSchema], default: [] },
-
-    // NEW: The History (Quests disappear from 'quests' and move here)
     completedHistory: { type: [QuestProgressSchema], default: [] },
-
-    // NEW: Tracks consecutive days logged in/active
     streak: { type: Number, default: 0 },
-
-    // NEW: Allows user to swap 1 quest per day
     rerollsLeft: { type: Number, default: 1 }
   }
 
 }, { timestamps: true });
 
 // --- Helper Method: Calculate Level ---
-// This uses a linear progression (Level up every 100 XP)
 UserSchema.methods.calculateLevel = function() {
     return Math.floor(this.xp / 100) + 1;
 };

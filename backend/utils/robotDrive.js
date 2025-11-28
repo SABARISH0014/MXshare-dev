@@ -15,5 +15,40 @@ oauth2Client.setCredentials({
   refresh_token: process.env.ROBOT_REFRESH_TOKEN
 });
 
-// 3. Export the Drive Instance
+// 3. Export the Drive Instance (EXISTING)
 export const robotDrive = google.drive({ version: 'v3', auth: oauth2Client });
+
+// 4. Export the Helper Client (NEW - Required for AI)
+export const driveClient = {
+  /**
+   * Fetches a file as a Readable Stream (For PDFs)
+   */
+  getFileStream: async (fileId) => {
+    try {
+      const response = await robotDrive.files.get(
+        { fileId: fileId, alt: 'media' },
+        { responseType: 'stream' }
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching stream for ${fileId}:`, error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Fetches a file as a Buffer (For Images/Vision)
+   */
+  getFileBuffer: async (fileId) => {
+    try {
+      const response = await robotDrive.files.get(
+        { fileId: fileId, alt: 'media' },
+        { responseType: 'arraybuffer' }
+      );
+      return Buffer.from(response.data);
+    } catch (error) {
+      console.error(`Error fetching buffer for ${fileId}:`, error.message);
+      throw error;
+    }
+  }
+};

@@ -13,6 +13,8 @@ import noteRoutes from './routes/noteRoutes.js';
 // 1. IMPORT THE ENGINE
 import gamificationEngine from './services/GamificationEngine.js'; 
 import gamificationRoutes from './routes/gamificationRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import aiRoutes from './routes/aiRoutes.js'; 
 // --- Config ---
 const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -62,6 +64,8 @@ app.use((req, res, next) => {
 // --- Routes ---
 app.use('/api/auth', authRoutes);
 app.use('/api/notes', noteRoutes);
+app.use('/api/admin', adminRoutes); // <--- Add this line
+app.use('/api/ai', aiRoutes); // <--- Mount
 app.use('/api/gamification', gamificationRoutes);
 // --- Socket Connection Logging ---
 io.on('connection', (socket) => {

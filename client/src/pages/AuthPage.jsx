@@ -9,6 +9,7 @@ import { Button, Input, Card, CardContent, CardHeader, CardTitle } from '../comp
 import { ToastContext } from '../context/ToastContext';
 import { API_BASE_URL } from '../data/constants';
 
+// Strict regex for students, optional for admins
 const EMAIL_REGEX = /^\d+[a-zA-Z]+\d+@psgtech\.ac\.in$/i;
 
 const AuthPage = ({ type = "Login", onNavigate, onAuthSuccess }) => {
@@ -22,7 +23,10 @@ const AuthPage = ({ type = "Login", onNavigate, onAuthSuccess }) => {
   const [userRole, setUserRole] = useState("student"); // 'student' | 'admin'
 
   const [formData, setFormData] = useState({
-    name: "", email: "", password: "", confirmPassword: ""
+    name: "", 
+    email: "", // Default empty, user can type admin@psgtech.ac.in
+    password: "", 
+    confirmPassword: ""
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -56,41 +60,20 @@ const AuthPage = ({ type = "Login", onNavigate, onAuthSuccess }) => {
         return;
     }
 
-    // --- DEFAULT ADMIN LOGIN BYPASS (Demo Mode) ---
-    // This allows you to login immediately with admin@psgtech.ac.in / admin@123
-    if (isLogin && userRole === 'admin' && formData.email === "admin@psgtech.ac.in" && formData.password === "admin@123") {
-        addToast("Welcome back, System Admin!", "success");
-        
-        // 1. SET LOCAL STORAGE (Crucial for AdminPage to detect login)
-        localStorage.setItem('adminToken', 'mock-admin-token-secure-123');
-
-        // 2. Call parent handler (Optional, keeps app state in sync)
-        onAuthSuccess(
-            "mock-admin-token-secure-123", 
-            { name: "System Admin", email: "admin@psgtech.ac.in", role: "admin" }, 
-            "mock-refresh-token", 
-            null, 
-            null
-        );
-        
-        // 3. Navigate to Admin Dashboard
-        navigate('/admin');
-        return; 
-    }
-    // -----------------------------------------------
-
     setIsLoading(true);
     setError("");
 
     try {
-      // DYNAMIC ENDPOINT SELECTION
+      // 1. Determine Endpoint
+      // Use standard auth/login for everyone. The backend checks the DB for role.
       let endpoint = '';
       if (isLogin) {
-        endpoint = userRole === 'admin' ? '/api/admin/login' : '/api/auth/login';
+        endpoint = '/api/auth/login'; 
       } else {
         endpoint = '/api/auth/signup';
       }
 
+      // 2. Make Real API Call
       const res = await axios.post(`${API_BASE_URL}${endpoint}`, {
         name: formData.name,
         email: formData.email,
@@ -101,6 +84,12 @@ const AuthPage = ({ type = "Login", onNavigate, onAuthSuccess }) => {
       addToast(data.message, "success");
       
       if (isLogin) {
+          // --- SECURITY NOTE ---
+          // We removed the strict "data.user.role !== 'admin'" check here.
+          // If the backend issued a token, we let them in. 
+          // The Admin Dashboard will show "403 Unauthorized" content if they aren't actually an admin.
+          
+          // 3. Save Real Tokens
           onAuthSuccess(
               data.accessToken, 
               data.user, 
@@ -109,14 +98,16 @@ const AuthPage = ({ type = "Login", onNavigate, onAuthSuccess }) => {
               data.googleRefreshToken
           );
 
-          // Redirect based on Role
+          // Explicitly save to localStorage for AdminPage to find immediately
+          localStorage.setItem('token', data.accessToken);
+          localStorage.setItem('adminToken', data.accessToken); 
+
+          // 4. Redirect
           if (userRole === 'admin') {
-             // SAVE TOKEN for AdminPage
-             localStorage.setItem('adminToken', data.accessToken);
-             navigate('/admin');
+              navigate('/admin');
           } else {
-             const destination = location.state?.from || '/dashboard';
-             navigate(destination);
+              const destination = location.state?.from || '/dashboard';
+              navigate(destination);
           }
 
       } else {
