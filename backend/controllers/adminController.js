@@ -4,11 +4,11 @@ import Report from "../models/Report.js";
 import { ModerationLog } from "../models/ModerationLog.js";
 
 /* ==============================
- 📊 DASHBOARD OVERVIEW
+  📊 DASHBOARD OVERVIEW
 ============================== */
 export const getDashboardStats = async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
+    const totalUsers = await User.countDocuments({ role: { $ne: 'admin' } });
     const totalNotes = await Note.countDocuments();
     const totalReports = await Report.countDocuments({ status: "pending" });
 
@@ -42,12 +42,12 @@ export const getDashboardStats = async (req, res) => {
 };
 
 /* ==============================
-  ⚠️ AI MODERATION QUEUE
+  ⚠️ AI MODERATION QUEUE (FIXED)
 ============================== */
 export const getModerationQueue = async (req, res) => {
   try {
-    // FIX: Only fetch 'review' (AI Flagged) or 'pending'.
-    // REMOVE 'blocked' from this list, otherwise processed items stay in the queue.
+    // FIX: Only fetch notes that are specifically in 'review' status.
+    // 'blocked' notes are considered "processed" by AI/Admin and shouldn't clutter the queue.
     const notes = await Note.find({
       moderationStatus: "review" 
     }).lean();
@@ -68,23 +68,7 @@ export const getModerationQueue = async (req, res) => {
 };
 
 /* ==============================
-  🚩 REPORT SYSTEM
-============================== */
-
-// Fetch Only Pending Reports
-export const getReports = async (req, res) => {
-  try {
-    // FIX: Filter by status: 'pending' so resolved reports disappear
-    const reports = await Report.find({ status: "pending" })
-      .sort({ createdAt: -1 });
-
-    res.json(reports);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-/* ==============================
- 🛡 APPROVE or BLOCK NOTE
+  🛡 APPROVE or BLOCK NOTE
 ============================== */
 export const reviewNote = async (req, res) => {
   const { decision, adminComment } = req.body;
@@ -106,6 +90,24 @@ export const reviewNote = async (req, res) => {
     );
 
     res.json({ message: `Note marked as ${newStatus}` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/* ==============================
+  🚩 REPORT SYSTEM (FIXED)
+============================== */
+
+// Fetch All Reports
+export const getReports = async (req, res) => {
+  try {
+    // FIX: Only fetch 'pending' reports. 
+    // 'resolved' or 'reviewed' reports should be hidden from the active queue.
+    const reports = await Report.find({ status: "pending" })
+      .sort({ createdAt: -1 });
+
+    res.json(reports);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
