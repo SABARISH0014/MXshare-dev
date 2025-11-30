@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { 
   Aperture, Search, LogIn, UserPlus, BookOpen, 
   Code, Database, Cpu, Globe, Calculator, Palette, Layers,
-  Loader2 // Added Loader icon
+  Loader2, Sparkles // Added Sparkles for AI branding
 } from 'lucide-react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -17,7 +17,6 @@ import TopContributors from '../components/TopContributors';
 import { ToastContext } from '../context/ToastContext';
 import { AuthContext } from '../context/AuthContext';
 import { API_BASE_URL } from '../data/constants';
-import { searchNotesSemantic } from '../utils/api'; // Import AI Search function
 
 // --- ANIMATION COMPONENTS ---
 const HeroAnimation = () => (
@@ -43,7 +42,10 @@ const HomePage = ({ onNavigate }) => {
   const [topContributors, setTopContributors] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [useAI, setUseAI] = useState(false); // NEW STATE FOR AI TOGGLE
+  
+  // AI Feature State
+  const [useAI, setUseAI] = useState(false); 
+  const [isSearching, setIsSearching] = useState(false); // Separate loading state for search
   
   const titleRef = useRef(null); 
 
@@ -52,8 +54,6 @@ const HomePage = ({ onNavigate }) => {
     const fetchNotes = async () => {
       try {
         const res = await axios.get(`${API_BASE_URL}/api/notes`);
-        // We fetch ALL notes once, then filter them on the client side
-        // This keeps the search fast and allows us to derive Top/Fresh lists easily
         setAllNotes(res.data);
       } catch (error) {
         console.error("Error fetching notes:", error);
@@ -69,11 +69,11 @@ const HomePage = ({ onNavigate }) => {
   // --- LOGIC: PROCESS DATA (Sort & Filter) ---
   useEffect(() => {
     if (allNotes && allNotes.length > 0) {
-      // 1. Sort Top Rated (High Rating -> Low Rating)
+      // 1. Sort Top Rated
       const sortedByRating = [...allNotes].sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0));
       setTopNotes(sortedByRating.slice(0, 3));
 
-      // 2. Sort Latest (Newest Date -> Oldest Date)
+      // 2. Sort Latest
       const sortedByDate = [...allNotes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setLatestNotes(sortedByDate.slice(0, 3));
 
@@ -125,38 +125,42 @@ const HomePage = ({ onNavigate }) => {
   useEffect(() => {
     const runSearch = async () => {
       // If query is empty, clear results and stop
-      if (searchQuery === '') {
+      if (searchQuery.trim() === '') {
         setSearchResults([]);
+        setIsSearching(false);
         return;
       }
 
-      setLoading(true);
+      setIsSearching(true);
 
-      if (useAI) {
-        // 1. AI SEMANTIC SEARCH
-        try {
-          // This calls the new API endpoint which uses Vector Search
-          const results = await searchNotesSemantic(searchQuery);
-          setSearchResults(results);
-        } catch (e) {
-          console.error("Semantic search failed", e);
-          addToast("AI Search failed, try standard search.", "error");
+      try {
+        if (useAI) {
+            // 1. AI SEMANTIC SEARCH (Server-side Embedding)
+            const res = await axios.get(`${API_BASE_URL}/api/notes`, {
+                params: { q: searchQuery, type: 'semantic' }
+            });
+            setSearchResults(res.data);
+        } else {
+            // 2. STANDARD KEYWORD SEARCH (Client-side filtering)
+            const lowerCaseQuery = searchQuery.toLowerCase();
+            const results = allNotes.filter(note => 
+              note.title?.toLowerCase().includes(lowerCaseQuery) ||
+              note.subject?.toLowerCase().includes(lowerCaseQuery) ||
+              note.uploader?.name?.toLowerCase().includes(lowerCaseQuery) ||
+              (note.tags && note.tags.some(tag => tag.toLowerCase().includes(lowerCaseQuery)))
+            );
+            setSearchResults(results);
         }
-      } else {
-        // 2. STANDARD KEYWORD SEARCH (Client-side filtering)
-        const lowerCaseQuery = searchQuery.toLowerCase();
-        const results = allNotes.filter(note => 
-          note.title?.toLowerCase().includes(lowerCaseQuery) ||
-          note.subject?.toLowerCase().includes(lowerCaseQuery) ||
-          note.uploader?.name?.toLowerCase().includes(lowerCaseQuery)
-        );
-        setSearchResults(results);
+      } catch (e) {
+        console.error("Search failed", e);
+        addToast("Search encountered an error.", "error");
+      } finally {
+        setIsSearching(false);
       }
-      setLoading(false);
     };
 
-    // Debounce the search to prevent API spam
-    const timer = setTimeout(runSearch, 500);
+    // Debounce the search
+    const timer = setTimeout(runSearch, 600);
     return () => clearTimeout(timer);
   }, [searchQuery, useAI, allNotes, addToast]);
 
@@ -241,6 +245,7 @@ const HomePage = ({ onNavigate }) => {
             MXShare Notes
           </h1>
           <p className="mt-4 text-3xl text-blue-600 dark:text-blue-400 font-light">Collaborate. Share. Learn.</p>
+          
           <div className="mt-8 max-w-lg mx-auto flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
             <Button onClick={() => user ? navigate('/dashboard') : onNavigate('login')} size="lg" className="flex-1 rounded-full bg-blue-600 text-white hover:bg-blue-700 border-none shadow-lg shadow-blue-500/30">
                 {user ? "Go to Dashboard" : "Login Now"}
@@ -253,21 +258,32 @@ const HomePage = ({ onNavigate }) => {
           {/* --- SEARCH BOX WITH AI TOGGLE --- */}
           <div className="mt-12 w-full max-w-2xl mx-auto p-4 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-300 dark:border-slate-700 search-teaser transition-colors duration-300">
             <div className="relative flex items-center">
-              <Search className={`absolute left-4 w-5 h-5 ${useAI ? 'text-indigo-500' : 'text-gray-500 dark:text-slate-400'}`} />
+              {isSearching ? (
+                  <Loader2 className="absolute left-4 w-5 h-5 animate-spin text-indigo-500" />
+              ) : (
+                  <Search className={`absolute left-4 w-5 h-5 ${useAI ? 'text-indigo-500' : 'text-gray-500 dark:text-slate-400'}`} />
+              )}
               
               <input
                 type="text"
-                placeholder={useAI ? "Ask a question (e.g., 'How do I solve differential equations?')..." : "Search notes, subjects, or contributors..."}
-                className="w-full h-14 pl-12 pr-28 text-lg border-none bg-transparent text-gray-900 dark:text-white focus:ring-0 placeholder:text-gray-500 dark:placeholder:text-slate-500"
+                placeholder={useAI ? "Ask AI (e.g., 'Notes on thermodynamics equations')..." : "Search notes, subjects, or contributors..."}
+                className="w-full h-14 pl-12 pr-28 text-lg border-none bg-transparent text-gray-900 dark:text-white focus:ring-0 placeholder:text-gray-500 dark:placeholder:text-slate-500 outline-none"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
 
               {/* AI Toggle Switch */}
-              <div className="absolute right-4 flex items-center gap-2 cursor-pointer" onClick={() => setUseAI(!useAI)}>
-                <span className={`text-xs font-bold transition-colors ${useAI ? 'text-indigo-600' : 'text-gray-400'}`}>AI</span>
-                <div className={`w-10 h-6 rounded-full p-1 transition-colors duration-300 ${useAI ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-600'}`}>
-                    <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${useAI ? 'translate-x-4' : 'translate-x-0'}`} />
+              <div 
+                className="absolute right-4 flex items-center gap-2 cursor-pointer bg-gray-100 dark:bg-slate-800 p-1.5 rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                onClick={() => setUseAI(!useAI)}
+                title={useAI ? "Switch to Standard Search" : "Enable AI Semantic Search"}
+              >
+                <div className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${useAI ? 'text-indigo-600' : 'text-gray-400'}`}>
+                    <Sparkles className="w-3 h-3" />
+                    <span>AI</span>
+                </div>
+                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors duration-300 ${useAI ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-600'}`}>
+                    <div className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform duration-300 ${useAI ? 'translate-x-4' : 'translate-x-0'}`} />
                 </div>
               </div>
             </div>
@@ -284,7 +300,7 @@ const HomePage = ({ onNavigate }) => {
             {categories.map((cat) => (
                 <button 
                     key={cat.name} 
-                    onClick={() => { setSearchQuery(cat.name); setUseAI(false); }} // Reset to standard search for categories
+                    onClick={() => { setSearchQuery(cat.name); setUseAI(false); window.scrollTo({top: 400, behavior: 'smooth'}); }} 
                     className="group flex items-center space-x-2 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-full hover:border-blue-500 dark:hover:border-blue-400 hover:shadow-md transition-all duration-200"
                 >
                 <span className="text-gray-500 dark:text-slate-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">{cat.icon}</span>
@@ -307,9 +323,14 @@ const HomePage = ({ onNavigate }) => {
           ) : searchQuery !== '' ? (
             /* --- SEARCH RESULTS --- */
             <div className="mb-16">
-              <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-8">
-                {useAI ? 'Semantic Results' : 'Search Results'} ({searchResults.length})
+              <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                {useAI ? <Sparkles className="text-indigo-500 w-6 h-6" /> : <Search className="w-6 h-6" />}
+                {useAI ? 'Semantic Results' : 'Search Results'}
               </h2>
+              <p className="text-sm text-gray-500 mb-8">
+                  Found {searchResults.length} matches for "{searchQuery}"
+              </p>
+
               {searchResults.length > 0 ? (
                 <div className="note-card-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {searchResults.map((note) => (

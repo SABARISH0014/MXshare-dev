@@ -1,14 +1,16 @@
 import fs from 'fs';
 import { Readable } from 'stream';
 import { google } from 'googleapis';
-import { robotDrive } from '../utils/robotDrive.js'; // Import robotDrive instance
+import { robotDrive, driveClient } from '../utils/robotDrive.js'; 
 import { Note } from '../models/Note.js';
 import { History } from '../models/History.js';
 import { NoteChunk } from '../models/NoteChunk.js'; 
 
 // --- AI Services ---
+// We import the processor to trigger background analysis (Summary, Embedding)
 import { processNoteQueue } from '../services/ContentProcessor.js';
-import { generateEmbedding } from '../services/AIService.js';
+// We import these for direct synchronous actions (Search, Re-moderation)
+import { generateEmbedding, moderateContent } from '../services/AIService.js';
 
 const CENTRAL_FOLDER_ID = process.env.CENTRAL_FOLDER_ID;
 
@@ -30,6 +32,7 @@ const makeFilePublic = async (fileId) => {
 
 export const getAllNotes = async (req, res) => {
   try {
+    // Only fetch notes that aren't blocked by AI or Admin
     const notes = await Note.find({ moderationStatus: { $ne: 'blocked' } })
       .populate('uploader', 'name')
       .sort({ createdAt: -1 });
@@ -44,11 +47,13 @@ export const getHomepageNotes = async (req, res) => {
   try {
     const filter = { moderationStatus: { $ne: 'blocked' } };
     
+    // Top Rated
     const topNotes = await Note.find(filter)
       .populate('uploader', 'name')
       .sort({ avgRating: -1 })
       .limit(3);
       
+    // Fresh Uploads
     const latestNotes = await Note.find(filter)
       .populate('uploader', 'name')
       .sort({ createdAt: -1 })
@@ -78,7 +83,7 @@ export const uploadLocalFile = async (req, res) => {
         try { parsedTags = JSON.parse(tags); } catch (e) { parsedTags = [tags]; }
     }
 
-    // Upload to Drive
+    // 1. Upload to Robot Google Drive
     const response = await robotDrive.files.create({
       requestBody: {
         name: name || req.file.originalname,
@@ -91,16 +96,16 @@ export const uploadLocalFile = async (req, res) => {
       fields: 'id, webViewLink, thumbnailLink', 
     });
 
-    // Cleanup
+    // 2. Cleanup Local Temp File
     if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
 
-    // Permission
+    // 3. Set Permissions
     await makeFilePublic(response.data.id);
 
-    // Determine Type
+    // 4. Determine Type
     const fileType = req.file.mimetype.includes('pdf') ? 'pdf' : 'image';
 
-    // Save DB
+    // 5. Save to MongoDB
     const newNote = new Note({
       title: name || req.file.originalname,
       subject,
@@ -115,35 +120,37 @@ export const uploadLocalFile = async (req, res) => {
       fileType: fileType,
       fileUrl: response.data.id, 
       driveFileId: response.data.id, 
-      moderationStatus: 'pending' 
+      moderationStatus: 'pending' // AI will update this shortly
     });
 
     await newNote.save();
 
-    // Trigger AI
+    // 6. Trigger AI Pipeline (Async)
+    // This runs Moderation, Summary, and Embeddings in the background
     processNoteQueue(newNote._id);
 
     res.status(201).json({ message: 'Uploaded successfully', note: newNote });
 
   } catch (error) {
     console.error('Local Upload Error:', error);
+    // Try to cleanup if failed
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ message: 'Upload failed', detail: error.message });
   }
 };
 
-// --- B. IMPORT FROM DRIVE ---
+// --- B. IMPORT FROM DRIVE (Drive Picker) ---
 export const importFromDrive = async (req, res) => {
   try {
     console.log("[Import] Request received");
     const { userFileId, googleToken, name, subject, semester, tags, cleanup } = req.body;
 
-    // 1. Auth as User to read file
+    // 1. Auth as User to read file (using the token passed from frontend)
     const userAuth = new google.auth.OAuth2();
     userAuth.setCredentials({ access_token: googleToken });
     const userDrive = google.drive({ version: 'v3', auth: userAuth });
 
-    // 2. Get Stream
+    // 2. Get Stream of file content
     let sourceStream;
     try {
       const streamRes = await userDrive.files.get(
@@ -156,7 +163,7 @@ export const importFromDrive = async (req, res) => {
       return res.status(400).json({ message: 'Could not read file from user drive.', detail: streamErr.message });
     }
 
-    // 3. Upload to Robot Drive
+    // 3. Upload to Robot Drive (Our Central Storage)
     let robotFile;
     try {
       robotFile = await robotDrive.files.create({
@@ -174,7 +181,7 @@ export const importFromDrive = async (req, res) => {
 
     await makeFilePublic(robotFile.data.id);
 
-    // 4. Save DB
+    // 4. Save to MongoDB
     let newNote = new Note({
         title: name,
         subject,
@@ -185,8 +192,7 @@ export const importFromDrive = async (req, res) => {
         thumbnailUrl: robotFile.data.thumbnailLink,
         tags: Array.isArray(tags) ? tags : [],
         
-        // AI Fields (Default to pdf for imports, AI will verify)
-        fileType: 'pdf', 
+        fileType: 'pdf', // Default assumption, AI will verify
         fileUrl: robotFile.data.id,
         driveFileId: robotFile.data.id,
         moderationStatus: 'pending'
@@ -194,10 +200,11 @@ export const importFromDrive = async (req, res) => {
 
     await newNote.save();
 
-    // 5. Trigger AI
+    // 5. Trigger AI Pipeline
     console.log(`[Import] Triggering AI for Note: ${newNote._id}`);
     processNoteQueue(newNote._id);
 
+    // 6. Cleanup User's Copy (Optional, if requested)
     if (cleanup) {
       try { await userDrive.files.delete({ fileId: userFileId }); } 
       catch (e) { console.warn("Cleanup warning:", e.message); }
@@ -221,6 +228,7 @@ export const saveDriveReference = async (req, res) => {
     let parsedTags = [];
     try { parsedTags = typeof tags === "string" ? JSON.parse(tags) : tags; } catch { parsedTags = [tags]; }
 
+    // Create a tiny text file representing the link in Drive
     const fileContent = `[InternetShortcut]\nURL=${videoUrl}`;
     const mediaStream = Readable.from([fileContent]);
 
@@ -256,6 +264,7 @@ export const saveDriveReference = async (req, res) => {
 
     await newNote.save();
 
+    // AI will attempt to scrape/process title/desc
     processNoteQueue(newNote._id);
 
     return res.status(201).json({ message: 'Video saved.', note: newNote });
@@ -276,54 +285,79 @@ export const searchNotes = async (req, res) => {
   if (!q) return res.status(400).json({ message: "Query required" });
 
   try {
-    // SEMANTIC SEARCH
+    // --- 1. AI SEMANTIC SEARCH (Vector) ---
     if (type === 'semantic') {
-       console.log(`[Search] Running semantic search for: "${q}"`);
+       console.log(`[Search] 🧠 Semantic search for: "${q}"`);
        
        const queryVector = await generateEmbedding(q);
        if (!queryVector) return res.status(500).json({ message: "AI Embedding failed" });
 
-       // Atlas Vector Search
        const results = await NoteChunk.aggregate([
          {
            "$vectorSearch": {
              "index": "vector_index", 
              "path": "embedding",
              "queryVector": queryVector,
-             "numCandidates": 100,
-             "limit": 10
+             "numCandidates": 150, 
+             "limit": 20 // Keep this higher (e.g., 20) to scan enough potential matches
            }
          },
          {
            "$project": {
-             "_id": 0,
              "noteId": 1,
-             "chunkText": 1,
-             "score": { "$meta": "vectorSearchScore" }
+             "score": { "$meta": "vectorSearchScore" },
+             "chunkText": 1
            }
          },
+         { 
+            "$match": { 
+                "score": { "$gte": 0.75 } 
+            } 
+         },
+         {
+            "$group": {
+                "_id": "$noteId",
+                "maxScore": { "$max": "$score" },
+                "snippet": { "$first": "$chunkText" } 
+            }
+         },
+         { "$sort": { "maxScore": -1 } }, // Sort by highest score first
+         
+         // ▼▼▼ CHANGE THIS VALUE TO 3 ▼▼▼
+         { "$limit": 3 }, 
+         // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+         
          {
            "$lookup": {
              "from": "notes",
-             "localField": "noteId",
+             "localField": "_id",
              "foreignField": "_id",
              "as": "note"
            }
          },
          { "$unwind": "$note" },
-         { "$match": { "note.moderationStatus": { "$ne": "blocked" } } }
+         { "$match": { "note.moderationStatus": { "$ne": "blocked" } } },
+         {
+            "$replaceRoot": {
+                "newRoot": {
+                    "$mergeObjects": [ "$note", { "searchScore": "$maxScore", "aiSnippet": "$snippet" } ]
+                }
+            }
+         }
        ]);
 
        return res.status(200).json(results);
-    } 
+    }
     
-    // BASIC KEYWORD SEARCH
+    // --- 2. STANDARD KEYWORD SEARCH (Regex) ---
     else {
       const regex = new RegExp(q, 'i');
       const results = await Note.find({
         $or: [{ title: regex }, { subject: regex }, { tags: regex }],
         moderationStatus: { $ne: 'blocked' }
-      }).populate('uploader', 'name');
+      })
+      .populate('uploader', 'name')
+      .limit(20); 
       
       return res.status(200).json(results);
     }
@@ -343,6 +377,7 @@ export const getNoteById = async (req, res) => {
     const note = await Note.findById(req.params.id).populate('uploader', 'name');
     if (!note) return res.status(404).json({ message: 'Note not found' });
     
+    // Security: Only Admins can see blocked notes
     if (note.moderationStatus === 'blocked' && req.user.role !== 'admin') {
         return res.status(403).json({ message: 'This content has been blocked by moderation.' });
     }
@@ -383,6 +418,7 @@ export const getLeaderboard = async (req, res) => {
           notes: "$totalNotes",
           downloads: "$totalDownloads",
           rating: { $ifNull: [{ $round: ["$avgRating", 1] }, 0] },
+          // Gamification Score Algorithm
           score: { 
             $add: [
                 { $multiply: ["$totalNotes", 10] }, 
@@ -434,6 +470,7 @@ export const trackDownload = async (req, res) => {
 
     if (!note) return res.status(404).json({ message: "Note not found" });
 
+    // Add to User History
     if (req.user && req.user.id) {
         try {
             await History.findOneAndUpdate(
@@ -453,21 +490,81 @@ export const trackDownload = async (req, res) => {
   }
 };
 
+// --- REPORT NOTE (User Flagging) ---
+// --- REPORT NOTE (User Flagging) ---
+export const reportNote = async (req, res) => {
+  try {
+    const { reason, message } = req.body;
+    const noteId = req.params.id;
+
+    // 🔐 Require login
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: "Login required to report content." });
+    }
+
+    // ⛔ Validate
+    if (!reason) {
+      return res.status(400).json({ message: "Report reason is required." });
+    }
+
+    // ☑ Find Note
+    const note = await Note.findById(noteId);
+    if (!note) {
+      return res.status(404).json({ message: "Note not found" });
+    }
+
+    // 🚩 Flag for moderation in UI + admin
+    note.moderationStatus = "review";
+    await note.save();
+
+    console.log(
+      `[Report] Note ${noteId} reported by User ${req.user.id}. Reason: ${reason} | Info: ${message}`
+    );
+
+    // 🧠 Quick AI Re-check (fails silently)
+    (async () => {
+      try {
+        const textToScan = note.aiSummary || note.description || note.title || "";
+        if (!textToScan.trim()) return;
+
+        const aiResult = await moderateContent(textToScan);
+
+        if (aiResult?.isSafe === false) {
+          console.log(`[Report] Auto-block triggered by AI`);
+          await Note.findByIdAndUpdate(noteId, { moderationStatus: "blocked" });
+        }
+      } catch (err) {
+        console.error("[Report] AI Re-scan failed:", err.message);
+      }
+    })();
+
+    return res.json({
+      message: "🚩 Report submitted. Our moderators will review it soon.",
+    });
+
+  } catch (error) {
+    console.error("Report Error:", error);
+    return res.status(500).json({ message: "Failed to submit report" });
+  }
+};
+
+
+
+
 export const cleanupDriveFile = async (req, res) => {
     try {
         const { fileId, googleToken } = req.body;
         if (!fileId || !googleToken) return res.status(400).json({ message: "Missing parameters" });
 
-        await google.drive('v3').files.delete({
-            fileId,
-            auth: new google.auth.OAuth2().setCredentials({ access_token: googleToken })
-        }); // Use client side token indirectly if needed, or better use client to delete.
-        // Actually, for cleanup, it's safer to just return 200 and let client handle or ignore.
-        // Backend deletion requires user token passed correctly.
+        const auth = new google.auth.OAuth2();
+        auth.setCredentials({ access_token: googleToken });
+
+        await google.drive({ version: 'v3', auth }).files.delete({ fileId });
         
         res.status(200).json({ message: "File deleted successfully" });
     } catch (error) {
-        // console.error("[Cleanup] Error:", error.message);
-        res.status(200).json({ message: "Cleanup failed but ignored" });
+        // We log but don't fail hard, as this is a cleanup task
+        console.warn("[Cleanup] Warning:", error.message);
+        res.status(200).json({ message: "Cleanup attempt finished" });
     }
 };

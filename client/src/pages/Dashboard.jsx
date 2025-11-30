@@ -9,7 +9,7 @@ import {
     Heart, Target, Zap, Calendar, Hash, Edit2,
     Github, Linkedin, Globe, GraduationCap, MapPin, 
     Briefcase, Cpu, Key, EyeOff, Flame, Trophy, Medal, Star,
-    BarChart3
+    BarChart3, Sparkles // Added Sparkles for AI
 } from 'lucide-react';
 
 // --- IMPORTS ---
@@ -21,8 +21,6 @@ import { ToastContext } from '../context/ToastContext';
 import FileUploadCard from '../components/FileUploadCard';
 import TopContributors from '../components/TopContributors';
 import NoteCard from '../components/NoteCard';
-
-// --- NEW WIDGET IMPORT ---
 import QuestWidget from '../components/QuestWidget';
 
 // Icon Mapping
@@ -35,12 +33,10 @@ const LucideIcons = {
 // 1. VISUAL & GAMIFICATION SUB-COMPONENTS
 // ==================================================================================
 
-// --- IMPACT ANALYTICS CHART (LIVE DATA) ---
+// --- IMPACT ANALYTICS CHART ---
 const ImpactAnalytics = ({ notes = [] }) => {
-    // 1. Calculate Totals
     const totalViews = notes.reduce((acc, n) => acc + (n.downloads || 0), 0);
     
-    // 2. Helper: Get the last 7 days as Date objects
     const getLast7Days = () => {
         const days = [];
         for (let i = 6; i >= 0; i--) {
@@ -51,32 +47,25 @@ const ImpactAnalytics = ({ notes = [] }) => {
         return days;
     };
 
-    // 3. Process Data for the Chart (Uploads per day)
     const chartData = getLast7Days().map(date => {
-        // Create a comparable date string (YYYY-MM-DD) to match database timestamps
         const dateStr = date.toISOString().split('T')[0];
-        
-        // Count notes uploaded on this specific date
         const count = notes.filter(n => {
             if (!n.createdAt) return false;
             return n.createdAt.split('T')[0] === dateStr;
         }).length;
 
         return {
-            label: date.toLocaleDateString('en-US', { weekday: 'short' }), // "Mon", "Tue"
+            label: date.toLocaleDateString('en-US', { weekday: 'short' }),
             val: count,
             fullDate: date.toLocaleDateString()
         };
     });
 
-    // 4. Dynamic Scale: Find the highest value to set the bar height relative to max
-    // If max is 0 (no uploads), default to 5 so bars don't break
     const maxVal = Math.max(...chartData.map(d => d.val));
     const scaleMax = maxVal === 0 ? 5 : maxVal;
 
     return (
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm h-full flex flex-col">
-            {/* Header */}
             <div className="flex justify-between items-start mb-6">
                 <div>
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
@@ -92,36 +81,22 @@ const ImpactAnalytics = ({ notes = [] }) => {
                 </div>
             </div>
 
-            {/* Bar Chart Container */}
             <div className="flex-grow flex items-end justify-between gap-2 md:gap-4 mt-2 h-40">
                 {chartData.map((item, i) => {
-                    // Calculate height percentage relative to the busiest day
                     const heightPercentage = (item.val / scaleMax) * 100;
-                    
-                    // Determine if this bar represents Today (last item)
                     const isToday = i === 6;
-
                     return (
                         <div key={i} className="flex flex-col items-center flex-1 group relative h-full justify-end">
-                            {/* Tooltip */}
                             <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-xs py-1 px-2 rounded pointer-events-none whitespace-nowrap z-10 shadow-lg">
                                 {item.val} Uploads on {item.label}
                             </div>
-                            
-                            {/* Bar Track */}
                             <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-lg relative overflow-hidden h-full flex items-end">
-                                {/* The Bar */}
                                 <div 
                                     className={`w-full rounded-lg transition-all duration-700 ease-out group-hover:shadow-[0_0_15px_rgba(59,130,246,0.5)] 
-                                        ${isToday 
-                                            ? 'bg-gradient-to-t from-indigo-500 to-purple-500' 
-                                            : 'bg-blue-500 dark:bg-blue-600 group-hover:bg-blue-400'
-                                        }`}
-                                    style={{ height: `${Math.max(heightPercentage, 5)}%` }} // Min 5% height so 0 isn't invisible
+                                        ${isToday ? 'bg-gradient-to-t from-indigo-500 to-purple-500' : 'bg-blue-500 dark:bg-blue-600 group-hover:bg-blue-400'}`}
+                                    style={{ height: `${Math.max(heightPercentage, 5)}%` }}
                                 ></div>
                             </div>
-                            
-                            {/* Label */}
                             <span className={`text-[10px] uppercase font-bold mt-3 ${isToday ? 'text-indigo-500' : 'text-gray-400'}`}>
                                 {item.label}
                             </span>
@@ -135,89 +110,32 @@ const ImpactAnalytics = ({ notes = [] }) => {
 
 // --- DYNAMIC BADGE STRIP ---
 const BadgeStrip = ({ user, notes = [] }) => {
-    // 1. Calculate Live Stats
     const uploadCount = notes.length;
     const totalViews = notes.reduce((acc, n) => acc + (n.downloads || 0), 0);
     const joinDate = new Date(user.createdAt);
     const daysSinceJoined = Math.floor((new Date() - joinDate) / (1000 * 60 * 60 * 24));
 
-    // 2. Define Badge Rules
     const BADGES_CONFIG = [
-        { 
-            id: 'newbie', 
-            icon: Star, 
-            label: "Explorer", 
-            desc: "Joined the platform", 
-            color: "text-yellow-400", 
-            condition: () => true // Always unlocked
-        },
-        { 
-            id: 'contributor', 
-            icon: Upload, 
-            label: "Contributor", 
-            desc: "Uploaded 1st note", 
-            color: "text-blue-400", 
-            condition: () => uploadCount >= 1 
-        },
-        { 
-            id: 'expert', 
-            icon: BookOpen, 
-            label: "Scholar", 
-            desc: "Uploaded 5+ notes", 
-            color: "text-indigo-400", 
-            condition: () => uploadCount >= 5 
-        },
-        { 
-            id: 'visionary', 
-            icon: Eye, 
-            label: "Visionary", 
-            desc: "100+ Total Views", 
-            color: "text-green-400", 
-            condition: () => totalViews >= 100 
-        },
-        { 
-            id: 'influencer', 
-            icon: Flame, 
-            label: "Influencer", 
-            desc: "500+ Total Views", 
-            color: "text-orange-500", 
-            condition: () => totalViews >= 500 
-        },
-        { 
-            id: 'veteran', 
-            icon: Medal, 
-            label: "Veteran", 
-            desc: "Member for 30 days", 
-            color: "text-purple-400", 
-            condition: () => daysSinceJoined >= 30 
-        }
+        { id: 'newbie', icon: Star, label: "Explorer", desc: "Joined the platform", color: "text-yellow-400", condition: () => true },
+        { id: 'contributor', icon: Upload, label: "Contributor", desc: "Uploaded 1st note", color: "text-blue-400", condition: () => uploadCount >= 1 },
+        { id: 'expert', icon: BookOpen, label: "Scholar", desc: "Uploaded 5+ notes", color: "text-indigo-400", condition: () => uploadCount >= 5 },
+        { id: 'visionary', icon: Eye, label: "Visionary", desc: "100+ Total Views", color: "text-green-400", condition: () => totalViews >= 100 },
+        { id: 'influencer', icon: Flame, label: "Influencer", desc: "500+ Total Views", color: "text-orange-500", condition: () => totalViews >= 500 },
+        { id: 'veteran', icon: Medal, label: "Veteran", desc: "Member for 30 days", color: "text-purple-400", condition: () => daysSinceJoined >= 30 }
     ];
 
     return (
         <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
             {BADGES_CONFIG.map((b) => {
                 const isUnlocked = b.condition();
-                
                 return (
                     <div key={b.id} className={`flex flex-col items-center min-w-[100px] p-4 rounded-xl border shadow-sm transition-all duration-300
-                        ${isUnlocked 
-                            ? 'bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800 hover:border-blue-300 hover:shadow-md cursor-pointer group' 
-                            : 'bg-gray-100 dark:bg-slate-900/50 border-transparent opacity-50 grayscale'
-                        }`}
-                    >
-                        <div className={`p-3 rounded-full mb-3 transition-transform shadow-inner
-                            ${isUnlocked 
-                                ? 'bg-gray-50 dark:bg-slate-800 group-hover:scale-110' 
-                                : 'bg-gray-200 dark:bg-slate-800'
-                            }`}>
+                        ${isUnlocked ? 'bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800 hover:border-blue-300 hover:shadow-md cursor-pointer group' : 'bg-gray-100 dark:bg-slate-900/50 border-transparent opacity-50 grayscale'}`}>
+                        <div className={`p-3 rounded-full mb-3 transition-transform shadow-inner ${isUnlocked ? 'bg-gray-50 dark:bg-slate-800 group-hover:scale-110' : 'bg-gray-200 dark:bg-slate-800'}`}>
                             <b.icon className={`w-6 h-6 ${isUnlocked ? b.color : 'text-gray-400'}`} />
                         </div>
-                        <span className={`text-xs font-bold text-center ${isUnlocked ? 'text-gray-800 dark:text-white' : 'text-gray-500'}`}>
-                            {b.label}
-                        </span>
-                        <span className="text-[10px] text-gray-400 text-center mt-1">
-                            {isUnlocked ? b.desc : <span className="flex items-center justify-center"><Lock className="w-3 h-3 mr-1"/> Locked</span>}
-                        </span>
+                        <span className={`text-xs font-bold text-center ${isUnlocked ? 'text-gray-800 dark:text-white' : 'text-gray-500'}`}>{b.label}</span>
+                        <span className="text-[10px] text-gray-400 text-center mt-1">{isUnlocked ? b.desc : <span className="flex items-center justify-center"><Lock className="w-3 h-3 mr-1"/> Locked</span>}</span>
                     </div>
                 );
             })}
@@ -225,19 +143,17 @@ const BadgeStrip = ({ user, notes = [] }) => {
     );
 };
 
-// --- ENHANCED HEADER ---
+// --- GAMIFIED HEADER ---
 const GamifiedHeader = ({ user, notesCount }) => {
     const level = Math.floor(notesCount / 5) + 1;
     const currentXP = (notesCount % 5) * 20;
     const nextLevelXP = 100;
     const progress = (currentXP / nextLevelXP) * 100;
-    const streak = user?.dailyQuestProgress?.streak || 0; // Updated to pull from user obj if available
+    const streak = user?.dailyQuestProgress?.streak || 0;
 
     return (
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-gray-200 dark:border-slate-800 shadow-sm mb-8 relative overflow-hidden">
              <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-                
-                {/* Avatar & Level */}
                 <div className="relative">
                     <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 p-1">
                         <div className="w-full h-full rounded-full bg-white dark:bg-slate-900 flex items-center justify-center text-3xl font-bold text-gray-800 dark:text-white uppercase">
@@ -249,7 +165,6 @@ const GamifiedHeader = ({ user, notesCount }) => {
                     </div>
                 </div>
 
-                {/* Text Info */}
                 <div className="text-center md:text-left flex-grow">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Hello, {user.name?.split(' ')[0]}!</h1>
                     <div className="flex items-center justify-center md:justify-start mt-2 space-x-4 text-sm">
@@ -263,7 +178,6 @@ const GamifiedHeader = ({ user, notesCount }) => {
                     </div>
                 </div>
                 
-                {/* XP Bar */}
                 <div className="w-full md:w-64 bg-gray-50 dark:bg-slate-800 rounded-xl p-4 border border-gray-100 dark:border-slate-700">
                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider mb-2 text-gray-500 dark:text-slate-400">
                         <span>Level Progress</span>
@@ -285,7 +199,7 @@ const GamifiedHeader = ({ user, notesCount }) => {
 };
 
 // ==================================================================================
-// 2. VIEW COMPONENTS (Profile, Settings, History, etc.)
+// 2. VIEW COMPONENTS
 // ==================================================================================
 
 const DashboardResetPassword = () => {
@@ -402,31 +316,22 @@ const DashboardProfile = ({ userData, onUpdateUser }) => {
             <div className="flex justify-between items-center mb-6">
                 <div><h2 className="text-3xl font-bold text-gray-900 dark:text-white">My Profile</h2></div>
                 {!isEditing && (
-                    <Button 
-                        onClick={() => setIsEditing(true)} 
-                        className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-200 transition-all shadow-md"
-                    >
+                    <Button onClick={() => setIsEditing(true)} className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-200 transition-all shadow-md">
                         <Edit2 className="w-4 h-4 mr-2"/> Edit Profile
                     </Button>
                 )}
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Left Column */}
                 <div className="lg:col-span-1 space-y-6">
-                    {/* Avatar Card */}
                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 overflow-visible shadow-sm relative mt-12">
-                        {/* Gradient Banner */}
                         <div className="h-32 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-600 rounded-t-2xl"></div>
-                        
-                        {/* Avatar Positioning */}
                         <div className="px-6 pb-6 pt-16 relative">
                             <div className="absolute -top-16 left-6">
                                 <div className="w-32 h-32 rounded-full border-[6px] border-white dark:border-slate-900 bg-gray-200 dark:bg-slate-800 flex items-center justify-center text-5xl font-bold text-gray-600 dark:text-slate-300 uppercase shadow-lg">
                                     {userData.name?.[0]}
                                 </div>
                             </div>
-                            
                             <div>
                                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{userData.name}</h1>
                                 <p className="text-gray-500 dark:text-slate-400 text-sm font-medium">{userData.email}</p>
@@ -439,25 +344,19 @@ const DashboardProfile = ({ userData, onUpdateUser }) => {
                             <h3 className="text-xs font-bold uppercase tracking-wider mb-4 text-gray-400">Social Connect</h3>
                             <div className="space-y-4">
                                 <a href={formData.github} target="_blank" rel="noreferrer" className="flex items-center text-gray-600 dark:text-slate-300 hover:text-blue-600 transition-colors cursor-pointer p-2 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-lg">
-                                    <Github className="w-5 h-5 mr-3"/> 
-                                    <span className="truncate">{formData.github || "Github not added"}</span>
-                                    {formData.github && <ExternalLink className="w-3 h-3 ml-auto opacity-50"/>}
+                                    <Github className="w-5 h-5 mr-3"/> <span className="truncate">{formData.github || "Github not added"}</span>
                                 </a>
                                 <a href={formData.linkedin} target="_blank" rel="noreferrer" className="flex items-center text-gray-600 dark:text-slate-300 hover:text-blue-600 transition-colors cursor-pointer p-2 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-lg">
-                                    <Linkedin className="w-5 h-5 mr-3"/> 
-                                    <span className="truncate">{formData.linkedin || "LinkedIn not added"}</span>
-                                    {formData.linkedin && <ExternalLink className="w-3 h-3 ml-auto opacity-50"/>}
+                                    <Linkedin className="w-5 h-5 mr-3"/> <span className="truncate">{formData.linkedin || "LinkedIn not added"}</span>
                                 </a>
                                 <div className="flex items-center text-gray-600 dark:text-slate-300 p-2">
-                                    <Globe className="w-5 h-5 mr-3"/> 
-                                    <span className="truncate">{formData.website || "Website not added"}</span>
+                                    <Globe className="w-5 h-5 mr-3"/> <span className="truncate">{formData.website || "Website not added"}</span>
                                 </div>
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* Right Column (Details) */}
                 <div className="lg:col-span-2 space-y-6">
                     {isEditing ? (
                         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-6 shadow-sm space-y-5 animate-in fade-in zoom-in-95 duration-300">
@@ -597,11 +496,14 @@ const DashboardContributions = ({ user, onNoteView }) => {
         </div>
     );
 };
+
+// --- SEARCH SECTION WITH AI TOGGLE ---
 const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSubject, setSelectedSubject] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
+    const [useAI, setUseAI] = useState(false); // New AI Toggle
 
     useEffect(() => {
         const fetchRecents = async () => {
@@ -617,14 +519,29 @@ const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
     const handleSearch = async () => {
         setIsSearching(true);
         try {
-            const res = await axios.get(`${API_BASE_URL}/api/notes`);
-            let results = res.data;
-            if (searchQuery) {
-                const q = searchQuery.toLowerCase();
-                results = results.filter(n => (n.title?.toLowerCase().includes(q) || n.uploader?.name?.toLowerCase().includes(q)));
+            if (useAI && searchQuery.trim()) {
+                // Semantic Search Call
+                const res = await axios.get(`${API_BASE_URL}/api/notes`, {
+                    params: { q: searchQuery, type: 'semantic' }
+                });
+                let results = res.data;
+                if (selectedSubject) results = results.filter(n => n.subject === selectedSubject);
+                setSearchResults(results);
+            } else {
+                // Standard Filter
+                const res = await axios.get(`${API_BASE_URL}/api/notes`);
+                let results = res.data;
+                if (searchQuery) {
+                    const q = searchQuery.toLowerCase();
+                    results = results.filter(n => (
+                        n.title?.toLowerCase().includes(q) || 
+                        n.uploader?.name?.toLowerCase().includes(q) ||
+                        (n.tags && n.tags.some(t => t.toLowerCase().includes(q)))
+                    ));
+                }
+                if (selectedSubject) results = results.filter(n => n.subject === selectedSubject);
+                setSearchResults(results);
             }
-            if (selectedSubject) results = results.filter(n => n.subject === selectedSubject);
-            setSearchResults(results);
         } catch (err) { console.error(err); } 
         finally { setIsSearching(false); }
     };
@@ -635,13 +552,30 @@ const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center">
                     <Search className="w-5 h-5 mr-3 text-blue-600 dark:text-blue-400"/> Find Learning Materials
                 </h2>
-                <div className="flex flex-col md:flex-row gap-4">
-                    <Input 
-                        placeholder="Search notes..." 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="flex-grow bg-gray-50 dark:bg-slate-950"
-                    />
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                    
+                    {/* Search Input Container */}
+                    <div className="relative flex-grow w-full md:w-auto">
+                        <Input 
+                            placeholder={useAI ? "Ask AI (e.g. 'Thermodynamics formulas')..." : "Search titles, tags..."}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                            className="w-full bg-gray-50 dark:bg-slate-950 pr-20" 
+                        />
+                        {/* AI Toggle */}
+                        <div 
+                            className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 cursor-pointer bg-white dark:bg-slate-900 p-1 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm"
+                            onClick={() => setUseAI(!useAI)}
+                            title={useAI ? "Switch to Standard Search" : "Enable AI Semantic Search"}
+                        >
+                            <span className={`text-[10px] font-bold ${useAI ? 'text-indigo-600' : 'text-gray-400'}`}>AI</span>
+                            <div className={`w-6 h-3 rounded-full transition-colors duration-300 relative ${useAI ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                                <div className={`absolute top-0.5 left-0.5 bg-white w-2 h-2 rounded-full shadow transition-transform duration-300 ${useAI ? 'translate-x-3' : 'translate-x-0'}`} />
+                            </div>
+                        </div>
+                    </div>
+
                     <Select 
                         value={selectedSubject} 
                         onChange={(e) => setSelectedSubject(e.target.value)}
@@ -650,15 +584,20 @@ const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
                         <option value="">All Subjects</option>
                         {syllabusData.subjects.map(s => <option key={s} value={s}>{s}</option>)}
                     </Select>
-                    <Button onClick={handleSearch} disabled={isSearching} className="bg-blue-600 hover:bg-blue-700 text-white">
-                        {isSearching ? <Loader2 className="animate-spin"/> : "Search"}
+                    
+                    <Button 
+                        onClick={handleSearch} 
+                        disabled={isSearching} 
+                        className={`text-white min-w-[100px] ${useAI ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    >
+                        {isSearching ? <Loader2 className="animate-spin w-4 h-4"/> : (useAI ? <Sparkles className="w-4 h-4 mr-2"/> : "Search")}
                     </Button>
                 </div>
             </div>
 
             <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center">
-                    {searchQuery ? 'Search Results' : 'Recommended For You'}
+                    {searchQuery ? (useAI ? 'Semantic Matches' : 'Search Results') : 'Recent Uploads'}
                     <span className="ml-3 text-xs bg-gray-200 dark:bg-slate-800 px-2 py-0.5 rounded-full">{searchResults.length}</span>
                 </h3>
                 {searchResults.length > 0 ? (
@@ -672,6 +611,7 @@ const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
                 ) : (
                     <div className="text-center py-20 bg-gray-50 dark:bg-slate-900/50 rounded-xl border-dashed border-2 border-gray-200 dark:border-slate-800">
                         <p className="text-gray-500">No results found.</p>
+                        {useAI && <p className="text-sm text-indigo-500 mt-2">Try rephrasing your query.</p>}
                     </div>
                 )}
             </div>
@@ -753,9 +693,8 @@ const DashboardNotesUsed = ({ onNoteView }) => {
     );
 };
 
-
 // ==================================================================================
-// MAIN DASHBOARD PAGE (EXPORT)
+// MAIN DASHBOARD PAGE
 // ==================================================================================
 
 const DashboardPage = () => {
@@ -816,8 +755,7 @@ const DashboardPage = () => {
             case 'notesUsed': return <DashboardNotesUsed onNoteView={handleNoteView} />;
             case 'topContributors': return <TopContributors />;
             case 'resetPassword': return <DashboardResetPassword />;
-            // ... inside DashboardPage component, inside renderContent switch statement ...
-
+            
             case 'main':
             default:
                 return (
@@ -841,13 +779,9 @@ const DashboardPage = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                             <div className="lg:col-span-8">
                                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 mb-3">Achievements</h3>
-                                
-                                {/* --- UPDATED LINE BELOW --- */}
                                 <BadgeStrip user={user} notes={userNotes} /> 
-                                
                             </div>
                             <div className="lg:col-span-4">
-                                {/* ... Quick Actions code remains same ... */}
                                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 mb-3">Quick Actions</h3>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button onClick={handleUploadClick} className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-xl font-bold text-sm hover:scale-105 transition-transform flex items-center justify-center border border-blue-100 dark:border-blue-800">

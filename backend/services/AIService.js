@@ -1,95 +1,198 @@
-import Groq from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import * as tf from '@tensorflow/tfjs';
+import '@tensorflow/tfjs-backend-cpu';
+import * as use from '@tensorflow-models/universal-sentence-encoder';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// --- INITIALIZE CLIENTS ---
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+const visionModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-// --- MODELS ---
-// Llama 3.3 is extremely smart and fast on Groq
-const CHAT_MODEL = "llama-3.3-70b-versatile"; 
+let embeddingModel = null;
 
-// --- 1. Generate Embeddings (Google) ---
-// We keep Google here because Groq doesn't natively support vector embeddings yet
-export async function embedText(text) {
+// ==============================
+// 1️⃣ Embedding Model Loader
+// ==============================
+async function loadEmbeddingModel() {
+  if (!embeddingModel) {
+    await tf.setBackend('cpu');
+    await tf.ready();
+    embeddingModel = await use.load();
+  }
+  return embeddingModel;
+}
+
+async function generateEmbedding(text) {
   try {
-    if (!text || !text.trim()) return null;
-    const result = await embedModel.embedContent(text);
-    return result.embedding.values; // Returns 768-dim vector
-  } catch (error) {
-    console.error("Embedding Error:", error.message);
+    if (!text?.trim()) return null;
+    const model = await loadEmbeddingModel();
+    const tensors = await model.embed(text);
+    const vector = await tensors.array();
+    tensors.dispose();
+    return vector[0];
+  } catch (err) {
+    console.error("Embedding error:", err.message);
     return null;
   }
 }
 
-// --- 2. Text Generation Helper (Groq) ---
-async function askGroq(messages, jsonMode = false) {
+// ==============================
+// 🧠 Semester Value Normalizer
+// ==============================
+const normalizeSemester = (value) => {
+  if (!value) return "";
+  const digit = String(value).match(/\d/);
+  return digit ? digit[0] : "";
+};
+
+// ==============================
+// 2️⃣ Moderation Logic
+// ==============================
+async function moderateContent(textOrBuffer, mimeType = 'text/plain') {
   try {
-    const completion = await groq.chat.completions.create({
-      messages: messages,
-      model: CHAT_MODEL,
-      temperature: 0.3,
-      // Groq supports native JSON mode for Llama 3 models
-      response_format: jsonMode ? { type: "json_object" } : undefined
-    });
-    return completion.choices[0].message.content;
-  } catch (error) {
-    console.error("Groq Error:", error.message);
-    return null;
+    const prompt = `
+      You are a strict safety checker.
+      Analyze: hate, nudity, sexual minors, violence, harassment.
+      
+      Respond ONLY JSON. No explanations. No markdown.
+      Format:
+      {"isSafe": true, "categories": []}
+    `;
+
+    const result = await visionModel.generateContent([
+      prompt,
+      mimeType === "text/plain"
+        ? textOrBuffer.substring(0, 3000)
+        : { inlineData: { data: textOrBuffer.toString("base64"), mimeType } }
+    ]);
+
+    let output = result.response.text()
+      .replace(/```json|```/g, "")
+      .trim();
+
+    // Fallback: extract the first valid JSON object if text includes extra content
+    const match = output.match(/\{[\s\S]*\}/);
+    if (match) output = match[0];
+
+    const json = JSON.parse(output);
+    return json;
+
+  } catch (err) {
+    console.warn("[Moderation Parsing Warning]:", err.message);
+    return { isSafe: true, categories: ["fallback"] }; // Don’t block the pipeline
   }
 }
 
-// --- 3. Moderation (Groq) ---
-export async function moderate(text) {
-  const prompt = `
-    Analyze this text for safety. Return a JSON object with this exact structure:
-    {"isSafe": boolean, "reason": "string"}
-    Text: "${text.substring(0, 2000)}"
-  `;
 
-  const raw = await askGroq([{ role: "user", content: prompt }], true);
-  
-  if (!raw) return { isSafe: true };
-
+// ==============================
+// 3️⃣ Metadata Suggestion
+// ==============================
+async function suggestMetadata(fileBuffer, mimeType) {
   try {
-    return JSON.parse(raw);
-  } catch (e) {
-    return { isSafe: true };
+    const prompt = `
+      Analyze this document/image.
+      Extract:
+      - Title
+      - Description (2 sentences)
+      - Subject (from MCA syllabus)
+      - Semester (1-4) → digit
+      - 5 Tags
+
+      Return ONLY JSON:
+      {
+        "title": "...",
+        "description": "...",
+        "subject": "...",
+        "semester": "...",
+        "tags": ["..."]
+      }
+    `;
+
+    const result = await visionModel.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: fileBuffer.toString("base64"),
+          mimeType
+        }
+      }
+    ]);
+
+    const cleanText = result.response.text().replace(/```json|```/g, "").trim();
+    let json = JSON.parse(cleanText);
+
+    json.semester = normalizeSemester(json.semester);
+
+    return {
+      title: json.title || "",
+      description: json.description || "",
+      subject: json.subject || "",
+      semester: json.semester || "",
+      tags: json.tags || []
+    };
+
+  } catch (err) {
+    console.error("Metadata Suggestion Error:", err);
+    return {
+      title: "",
+      description: "",
+      subject: "",
+      semester: "",
+      tags: []
+    };
   }
 }
 
-// --- 4. Summarization (Groq) ---
-export async function summarize({ content, type }) {
-  const prompt = `
-    Summarize this ${type} in 2 concise sentences for a student.
-    Content: "${content.substring(0, 4000)}"
-  `;
-  
-  const result = await askGroq([{ role: "user", content: prompt }]);
-  return result || "Summary unavailable.";
-}
-
-// --- 5. Metadata Suggestion (Groq) ---
-export async function suggestMetadata({ rawText, originalFilename }) {
-  const prompt = `
-    Suggest a title and 5 tags. Return JSON:
-    {"title": "string", "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]}
-    File: ${originalFilename}
-    Text: "${rawText.substring(0, 3000)}"
-  `;
-
-  const raw = await askGroq([{ role: "user", content: prompt }], true);
-  
+// ==============================
+// 4️⃣ Text Summary
+// ==============================
+async function summarizeContent(text) {
   try {
-    return JSON.parse(raw);
-  } catch (e) {
-    return { title: originalFilename, tags: [] };
+    const result = await visionModel.generateContent(
+      `Summarize for students:\n${text.substring(0, 5000)}`
+    );
+    return result.response.text();
+  } catch {
+    return "Summary unavailable.";
   }
 }
 
-// Export Alias
-export const generateEmbedding = embedText;
+// ==============================
+// 5️⃣ Vision OCR (PDF/Image Text Extraction)
+// ==============================
+async function visionOCR({ prompt, mimeType, data }) {
+  try {
+    const result = await visionModel.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data,
+          mimeType,
+        },
+      },
+    ]);
+
+    const extracted = result.response.text()
+      .replace(/```/g, "")
+      .trim();
+
+    return extracted || "";
+  } catch (err) {
+    console.error("Vision OCR failed:", err.message);
+    return "";
+  }
+}
+
+
+// ==============================
+// ✔ Single Proper Export Block
+// ==============================
+export {
+  generateEmbedding,
+  moderateContent,
+  suggestMetadata,
+  summarizeContent,
+  loadEmbeddingModel,
+  visionOCR
+};

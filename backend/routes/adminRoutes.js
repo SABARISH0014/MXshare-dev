@@ -1,19 +1,24 @@
-import express from 'express';
-import * as adminController from '../controllers/adminController.js';
-import { authenticateJWT, restrictToAdmin } from '../middleware/authMiddleware.js';
+import express from "express";
+import * as adminController from "../controllers/adminController.js";
+import { authenticateJWT, restrictToAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// GLOBAL GUARD: All routes require Admin Token
+// Protect All Routes
 router.use(authenticateJWT, restrictToAdmin);
 
-// 1. Dashboard Overview
-router.get('/dashboard-data', adminController.getDashboardStats);
+// Dashboard
+router.get("/dashboard-data", adminController.getDashboardStats);
 
-// 2. Moderation Queue
-router.get('/queue', adminController.getModerationQueue);
+// Moderation Queue
+router.get("/queue", adminController.getModerationQueue);
 
-// 3. Review Action
-router.post('/review/:id', adminController.reviewNote);
+// Manual Review
+router.post("/review/:id", adminController.reviewNote);
+
+/* 🚨 REPORTS */
+router.get("/reports", adminController.getReports);
+router.post("/reports/:reportId/resolve", adminController.resolveReport);
+router.post("/reports/:reportId/block-note", adminController.blockReportedNote);
 
 export default router;

@@ -1,13 +1,14 @@
-import { createRequire } from 'module';
+import { createRequire } from "module";
 const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
-import fs from 'fs';
-import { driveClient } from '../utils/robotDrive.js'; 
-import { Note } from '../models/Note.js';
-import { NoteChunk } from '../models/NoteChunk.js';
-import * as AIService from './AIService.js';
+const pdfParse = require("pdf-parse");
 
-// --- Helper: Chunk Text ---
+import { driveClient } from "../utils/robotDrive.js";
+import { Note } from "../models/Note.js";
+import { NoteChunk } from "../models/NoteChunk.js";
+import { ModerationLog } from "../models/ModerationLog.js";
+import * as AIService from "./AIService.js";
+
+// Chunk helper
 function chunkText(text, size = 800, overlap = 100) {
   const chunks = [];
   for (let i = 0; i < text.length; i += (size - overlap)) {
@@ -16,131 +17,117 @@ function chunkText(text, size = 800, overlap = 100) {
   return chunks;
 }
 
-// --- Helper: Stream to Buffer ---
+// Stream helper
 async function streamToBuffer(stream) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    stream.on('data', (chunk) => chunks.push(chunk));
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-    stream.on('error', reject);
+    stream.on("data", (c) => chunks.push(c));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", reject);
   });
 }
 
-// --- Helper: Extract Text ---
-export async function extractText(note) {
+// OCR fallback function using Gemini Vision
+async function runVisionOCR(buffer) {
   try {
-    let fullText = "";
-    
-    if (note.fileType === 'pdf' && note.driveFileId) {
-      const stream = await driveClient.getFileStream(note.driveFileId);
-      const buffer = await streamToBuffer(stream);
-      const data = await pdfParse(buffer);
-      fullText = data.text;
-    } else if (note.description) {
-      fullText = note.description; // Fallback
-    } else if (note.title) {
-      fullText = note.title; // Minimum fallback
-    }
-    
-    return fullText.replace(/\s+/g, ' ').trim();
+    console.log("[AI] 🔍 Running Gemini Vision OCR...");
+    const base64File = buffer.toString("base64");
+
+    const text = await AIService.visionOCR({
+      prompt: "Extract all text from this document.",
+      mimeType: "application/pdf",
+      data: base64File,
+    });
+
+    return text?.trim() || "";
   } catch (err) {
-    console.error(`Extraction failed for note ${note._id}:`, err);
+    console.error("Vision OCR failed:", err);
     return "";
   }
 }
 
-// --- Main Processing Workflow ---
+// Extract text with OCR fallback
+async function extractText(note) {
+  let text = "";
+
+  if (note.googleDriveFileId) {
+    const stream = await driveClient.getFileStream(note.googleDriveFileId);
+    const buffer = await streamToBuffer(stream);
+
+    try {
+      const parsed = await pdfParse(buffer);
+      text = parsed.text?.replace(/\s+/g, " ").trim() || "";
+    } catch (err) {
+      console.log("PDF parse failed, trying OCR...");
+    }
+
+    if (!text || text.length < 60) {
+      text = await runVisionOCR(buffer);
+    }
+  }
+  return text;
+}
+
+// MAIN PIPELINE
 export async function processNoteContent(noteId) {
-  console.log(`[AI] Processing Note: ${noteId}`);
+  console.log(`[AI] 🚀 Processing Note: ${noteId}`);
   const note = await Note.findById(noteId);
   if (!note) return;
 
   try {
-    // 1. Extract Text
-    const rawText = await extractText(note);
-    if (!rawText || rawText.length < 50) {
-      console.log(`[AI] Insufficient text for Note ${noteId}`);
+    let rawText = await extractText(note);
+
+    if (!rawText || rawText.length < 40) {
+      console.log("[AI] ❌ Not enough text");
+      note.aiSummary = "AI could not extract readable text.";
+      note.moderationStatus = "safe";
+      await note.save();
       return;
     }
 
-    // 2. Moderation Check
-    const modResult = await AIService.moderate(rawText);
-    if (!modResult.isSafe) {
-      console.log(`[AI] Content Blocked for Note ${noteId}`);
-      note.moderationStatus = 'blocked';
+    console.log("[AI] 🛡 Moderating...");
+    const mod = await AIService.moderateContent(rawText);
+
+    await ModerationLog.create({
+      noteId,
+      status: mod.isSafe ? "safe" : "blocked",
+      reason: mod.reason || null,
+      confidence: mod.confidence || null,
+    });
+
+    if (!mod.isSafe) {
+      note.moderationStatus = "blocked";
       await note.save();
-      return; 
+      return;
     }
 
-    // 3. Generate Summary
-    const summary = await AIService.summarize({ content: rawText, type: note.fileType });
-    note.aiSummary = summary;
-    note.moderationStatus = 'safe'; 
+    console.log("[AI] ✍ Summarizing...");
+    note.aiSummary = await AIService.summarizeContent(rawText);
+    note.moderationStatus = "safe";
     await note.save();
 
-    // 4. Generate Embeddings for Search
-    await NoteChunk.deleteMany({ noteId: note._id });
+    console.log("[AI] 🔎 Embeddings...");
+    await NoteChunk.deleteMany({ noteId });
 
-    const textChunks = chunkText(rawText);
-    let vectorCount = 0;
-
-    for (let i = 0; i < Math.min(textChunks.length, 20); i++) { 
-      const embedding = await AIService.embedText(textChunks[i]);
-      if (embedding) {
+    const chunks = chunkText(rawText);
+    for (let i = 0; i < Math.min(chunks.length, 20); i++) {
+      const embed = await AIService.generateEmbedding(chunks[i]);
+      if (embed) {
         await NoteChunk.create({
-          noteId: note._id,
-          chunkText: textChunks[i],
-          embedding,
-          chunkIndex: i
+          noteId,
+          chunkText: chunks[i],
+          embedding: embed,
+          chunkIndex: i,
         });
-        vectorCount++;
       }
     }
-    console.log(`[AI] Note ${noteId} processed. ${vectorCount} vectors created.`);
 
-  } catch (error) {
-    console.error(`[AI] Processing Failed for ${noteId}:`, error);
+    console.log(`[AI] ✅ Done Processing: ${noteId}`);
+  } catch (err) {
+    console.error("Pipeline failed", err);
+    note.aiSummary = "AI failed during analysis.";
+    await note.save();
   }
 }
 
-// --- Semantic Search Logic ---
-export async function semanticSearch(query) {
-  const queryVector = await AIService.embedText(query);
-  if (!queryVector) return [];
-
-  const results = await NoteChunk.aggregate([
-    {
-      "$vectorSearch": {
-        "index": "vector_index", 
-        "path": "embedding",
-        "queryVector": queryVector,
-        "numCandidates": 50,
-        "limit": 10
-      }
-    },
-    {
-      "$lookup": {
-        "from": "notes",
-        "localField": "noteId",
-        "foreignField": "_id",
-        "as": "note"
-      }
-    },
-    { "$unwind": "$note" },
-    { "$match": { "note.moderationStatus": "safe" } },
-    {
-      "$project": {
-        "_id": 0,
-        "note": 1,
-        "score": { "$meta": "vectorSearchScore" },
-        "snippet": "$chunkText"
-      }
-    }
-  ]);
-
-  return results;
-}
-
-// --- CRITICAL FIX: EXPORT ALIAS ---
-// This allows 'noteController.js' to find 'processNoteQueue'
 export const processNoteQueue = processNoteContent;

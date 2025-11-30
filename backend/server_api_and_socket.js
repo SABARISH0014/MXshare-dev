@@ -43,7 +43,7 @@ app.use(cookieParser(COOKIE_SECRET));
 app.use('/api/ai', aiRoutes);
 
 // --- Socket.IO ---
-const io = new SocketIoServer(server, {
+export const io = new SocketIoServer(server, {
   cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true }
 });
 

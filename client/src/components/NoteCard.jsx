@@ -94,14 +94,60 @@ const NoteCard = ({ note, onNavigate }) => {
               <span className="text-xs font-bold text-yellow-700 dark:text-yellow-500">{note.avgRating ? note.avgRating.toFixed(1) : "N/A"}</span>
             </div>
           </div>
+          
 
           {/* Title & Subject */}
-          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 line-clamp-1 group-hover:text-blue-500 transition-colors">
-            {note.title}
-          </h3>
-          <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-4 uppercase tracking-wider text-xs">
-            {note.subject}
-          </p>
+<h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1 line-clamp-1 group-hover:text-blue-500 transition-colors">
+  {note.title}
+</h3>
+<p className="text-sm font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">
+  {note.subject}
+</p>
+
+{/* Moderation Status Badge */}
+{note.moderationStatus && (
+  <div
+    className={`
+      inline-flex items-center gap-1 px-2.5 py-1 mb-3 rounded-full text-[11px]
+      font-semibold tracking-wide shadow-sm backdrop-blur-lg border 
+      transition-all duration-300
+      ${
+        note.moderationStatus === "safe"
+          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+        : note.moderationStatus === "blocked"
+          ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400"
+        : note.moderationStatus === "processing"
+          ? "bg-yellow-400/10 border-yellow-400/30 text-yellow-600 dark:text-yellow-400 animate-pulse"
+        : "bg-gray-500/10 border-gray-500/20 text-gray-600"
+      }
+    `}
+  >
+    {/* Icon */}
+    <span className="relative flex items-center justify-center w-3 h-3">
+      <span
+        className={`absolute w-2 h-2 rounded-full
+          ${
+            note.moderationStatus === "safe"
+              ? "bg-emerald-500"
+            : note.moderationStatus === "blocked"
+              ? "bg-red-500"
+            : note.moderationStatus === "processing"
+              ? "bg-yellow-400 animate-ping"
+            : "bg-gray-400"
+          }`}
+      />
+    </span>
+
+    {note.moderationStatus === "safe"
+      ? "SAFE CONTENT"
+      : note.moderationStatus === "blocked"
+      ? "BLOCKED"
+      : note.moderationStatus === "processing"
+      ? "AI REVIEWING..."
+      : "PENDING"}
+  </div>
+)}
+
           
           {/* Description */}
           <p className="text-gray-600 dark:text-slate-300 text-sm line-clamp-2 mb-6 flex-grow">
