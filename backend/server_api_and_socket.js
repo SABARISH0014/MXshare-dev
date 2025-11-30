@@ -30,7 +30,7 @@ connectDB();
 const allowedOrigins = [
   'http://localhost:5173', 
   'http://localhost:5174',
-  'https://mx-share-new.vercel.app'
+  'https://m-xshare-dev.vercel.app'
 ];
 // --- Middleware ---
 app.use(cors({
