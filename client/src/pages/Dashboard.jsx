@@ -500,7 +500,6 @@ const DashboardContributions = ({ user, onNoteView }) => {
 // --- SEARCH SECTION WITH AI TOGGLE ---
 const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedSubject, setSelectedSubject] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [useAI, setUseAI] = useState(false); // New AI Toggle
@@ -524,9 +523,7 @@ const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
                 const res = await axios.get(`${API_BASE_URL}/api/notes`, {
                     params: { q: searchQuery, type: 'semantic' }
                 });
-                let results = res.data;
-                if (selectedSubject) results = results.filter(n => n.subject === selectedSubject);
-                setSearchResults(results);
+                setSearchResults(res.data);
             } else {
                 // Standard Filter
                 const res = await axios.get(`${API_BASE_URL}/api/notes`);
@@ -539,7 +536,6 @@ const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
                         (n.tags && n.tags.some(t => t.toLowerCase().includes(q)))
                     ));
                 }
-                if (selectedSubject) results = results.filter(n => n.subject === selectedSubject);
                 setSearchResults(results);
             }
         } catch (err) { console.error(err); } 
@@ -548,49 +544,52 @@ const DashboardSearchSection = ({ onNoteView, triggerRefresh }) => {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center">
-                    <Search className="w-5 h-5 mr-3 text-blue-600 dark:text-blue-400"/> Find Learning Materials
+            <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-200 dark:border-slate-800 shadow-xl relative overflow-hidden">
+                {/* Decorative background element */}
+                <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center relative z-10">
+                    <Search className="w-6 h-6 mr-3 text-blue-600 dark:text-blue-400"/> Find Learning Materials
                 </h2>
-                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
-                    
-                    {/* Search Input Container */}
-                    <div className="relative flex-grow w-full md:w-auto">
-                        <Input 
-                            placeholder={useAI ? "Ask AI (e.g. 'Thermodynamics formulas')..." : "Search titles, tags..."}
+                
+                <div className="flex flex-col md:flex-row gap-4 relative z-10">
+                    <div className="relative flex-grow w-full group">
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 z-10 pointer-events-none transition-colors duration-300">
+                            {isSearching ? (
+                                <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                            ) : (
+                                <Search className={`w-6 h-6 ${useAI ? 'text-indigo-500' : 'text-gray-400 group-focus-within:text-blue-500'}`} />
+                            )}
+                        </div>
+                        
+                        <input 
+                            type="text"
+                            placeholder={useAI ? "Ask AI (e.g. 'Thermodynamics formulas')..." : "Search titles, tags, subjects..."}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                            className="w-full bg-gray-50 dark:bg-slate-950 pr-20" 
+                            className="w-full h-16 pl-14 pr-36 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-blue-500/20 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-lg text-gray-900 dark:text-white placeholder:text-gray-400 shadow-sm hover:shadow-md focus:shadow-lg dark:hover:bg-black/20" 
                         />
+
                         {/* AI Toggle */}
                         <div 
-                            className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 cursor-pointer bg-white dark:bg-slate-900 p-1 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 cursor-pointer bg-white dark:bg-slate-900 p-2 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm hover:bg-gray-50 dark:hover:bg-slate-800 transition-all active:scale-95"
                             onClick={() => setUseAI(!useAI)}
                             title={useAI ? "Switch to Standard Search" : "Enable AI Semantic Search"}
                         >
-                            <span className={`text-[10px] font-bold ${useAI ? 'text-indigo-600' : 'text-gray-400'}`}>AI</span>
-                            <div className={`w-6 h-3 rounded-full transition-colors duration-300 relative ${useAI ? 'bg-indigo-600' : 'bg-gray-300'}`}>
-                                <div className={`absolute top-0.5 left-0.5 bg-white w-2 h-2 rounded-full shadow transition-transform duration-300 ${useAI ? 'translate-x-3' : 'translate-x-0'}`} />
+                            <span className={`text-xs font-bold transition-colors ${useAI ? 'text-indigo-600' : 'text-gray-400'}`}>AI</span>
+                            <div className={`w-8 h-4 rounded-full p-0.5 transition-colors duration-300 ${useAI ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-700'}`}>
+                                <div className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform duration-300 ${useAI ? 'translate-x-4' : 'translate-x-0'}`} />
                             </div>
                         </div>
                     </div>
-
-                    <Select 
-                        value={selectedSubject} 
-                        onChange={(e) => setSelectedSubject(e.target.value)}
-                        className="w-full md:w-64 bg-gray-50 dark:bg-slate-950"
-                    >
-                        <option value="">All Subjects</option>
-                        {syllabusData.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                    </Select>
                     
                     <Button 
                         onClick={handleSearch} 
                         disabled={isSearching} 
-                        className={`text-white min-w-[100px] ${useAI ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                        className={`text-white min-w-[140px] h-16 rounded-2xl text-lg font-semibold shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-all active:scale-95 ${useAI ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                     >
-                        {isSearching ? <Loader2 className="animate-spin w-4 h-4"/> : (useAI ? <Sparkles className="w-4 h-4 mr-2"/> : "Search")}
+                        {isSearching ? <Loader2 className="animate-spin w-5 h-5"/> : (useAI ? <><Sparkles className="w-5 h-5 mr-2"/> Ask AI</> : "Search")}
                     </Button>
                 </div>
             </div>

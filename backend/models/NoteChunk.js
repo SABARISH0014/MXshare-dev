@@ -10,10 +10,18 @@ const noteChunkSchema = new mongoose.Schema({
   embedding: {
     type: [Number],
     required: true,
-    index: 'vector' // Requires MongoDB Atlas Vector Search Index
+    // Note: The actual vector index is created in MongoDB Atlas Search definition
   },
   
-  chunkIndex: { type: Number, required: true } // To maintain order
+  chunkIndex: { type: Number, required: true }, // To maintain order
+
+  // ==================================================
+  // 🔥 NEW FIELDS FOR PRE-FILTERING (Denormalized)
+  // ==================================================
+  // We copy these from the parent Note so the Vector Search 
+  // can filter by them *inside* the vector query efficiently.
+  subject: { type: String, required: true },
+  semester: { type: String, required: true }
 });
 
 export const NoteChunk = mongoose.model('NoteChunk', noteChunkSchema);

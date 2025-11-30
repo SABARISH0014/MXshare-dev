@@ -356,3 +356,58 @@ export const getProfile = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+export const updatePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    // 1. Get user with password field
+    // Note: req.user.id comes from authenticateJWT middleware
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // 2. Security Check: Verify Current Password
+    // Handle OAuth users who might not have a password set yet
+    if (!user.password) {
+        // If user logged in via Google and wants to set a password for the first time
+        // We can allow it, OR force them to use "Forgot Password" flow.
+        // For this implementation, we will allow setting it if they are authenticated.
+        // If you want strictness, uncomment the return below.
+        
+        // return res.status(400).json({ message: 'You are logged in via Google. Please use "Forgot Password" to set a password.' });
+    } else {
+        // Standard User: Must verify current password
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Current password is incorrect' });
+        }
+    }
+
+    // 3. Hash & Update New Password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+
+    // 4. Update OAuth flag if applicable
+    // If they set a password, they are no longer just an "OAuth" user
+    if (user.isOAuth) user.isOAuth = false;
+
+    await user.save();
+
+    // 5. Send Success
+    // Note: We do NOT generate a new token here. The existing token remains valid until expiry.
+    // Ideally, you might want to revoke all OTHER refresh tokens here for strict security, 
+    // but that forces re-login on other devices.
+    
+    res.status(200).json({ 
+        success: true, 
+        message: 'Password updated successfully' 
+    });
+
+  } catch (err) {
+    console.error("Update Password Error:", err);
+    res.status(500).json({ message: 'Server error updating password' });
+  }
+};

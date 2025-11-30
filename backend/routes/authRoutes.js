@@ -8,7 +8,8 @@ import {
     updateProfile, // <--- ENSURE THIS IS IMPORTED
     signup,  // <--- ADD THIS IMPORT
     login,    // <--- ADD THIS IMPORT
-    getProfile // <--- Import the new function
+    getProfile, // <--- Import the new function
+    updatePassword // <--- Import the new function
 } from '../controllers/authController.js';
 
 
@@ -23,5 +24,6 @@ router.post('/logout', logout);
 
 // --- ENSURE THIS ROUTE EXISTS ---
 router.put('/profile', authenticateJWT, updateProfile);
+router.put('/updatepassword', authenticateJWT, updatePassword); // <--- Add this line
 router.get('/profile', authenticateJWT, getProfile);
 export default router;
